@@ -20,7 +20,7 @@ func Flags() []cli.Flag {
 	return []cli.Flag{
 		&cli.IntFlag{Name: NameOfHttpPort, Value: define.AppHttpPort, Usage: "http port"},
 		&cli.IntFlag{Name: NameOfTcpPort, Value: define.AppTcpPort, Usage: "tcp port"},
-		&cli.StringFlag{Name: NameOfConfPath, Value: "./etc", Usage: "config path"},
+		&cli.StringFlag{Name: NameOfConfPath, Value: define.DefaultIniPath, Usage: "config path"},
 		&cli.StringFlag{Name: NameOfEnv, Value: define.EnvOfDev, Usage: "running env"},
 	}
 }
