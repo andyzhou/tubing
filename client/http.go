@@ -10,6 +10,7 @@ import (
 
 /*
  * http client
+ * - short connect
  */
 
 //client info

@@ -14,6 +14,7 @@ import (
 
 /*
  * websocket client
+ * - persistent connect
  */
 
 //message info
@@ -24,10 +25,13 @@ type WebSocketMessage struct {
 
 //client info
 type WebSocketClient struct {
+	//public property
 	Host string
 	Port int
 	Uri  string
 	Session string //bound session
+
+	//private property
 	u *url.URL
 	conn *websocket.Conn
 	cbForRead func(session string, msg *WebSocketMessage)
