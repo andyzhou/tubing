@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"tubing/client"
 	"tubing/define"
+	"tubing/lib/client"
 )
 
 /*
@@ -50,6 +50,7 @@ func (f *Router) Run(c *gin.Context) {
 		requestUrl string
 		reqContentType string
 	)
+
 	//get key data
 	anyPath := c.Param(define.AnyPath)
 	reqContentType = c.Request.Header.Get(define.HeaderOfContentType)
@@ -86,15 +87,17 @@ func (f *Router) Run(c *gin.Context) {
 	log.Println("org:", originData, ", type:", contentType)
 
 	//init http client
-	cli := client.NewHttpClient()
-	cli.Method = f.requester.GetReqMethod(c)
-	cli.ContentType = reqContentType
-	cli.To = to
-	cli.Query = requestUrl
-	cli.RawData = originData
+	cli := client.GetHttpClient()
+	httpReq := &client.HttpReq{
+		Method: f.requester.GetReqMethod(c),
+		ContentType: reqContentType,
+		To: to,
+		Query: requestUrl,
+		RawData: originData,
+	}
 
 	//send client request to target
-	body, err := cli.Send()
+	body, err := cli.SendRequest(httpReq)
 	if err != nil {
 		c.String(http.StatusInternalServerError, err.Error())
 		return

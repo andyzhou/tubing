@@ -22,6 +22,22 @@ func NewManager() *Manager {
 	return this
 }
 
+//get conn by session
+func (f *Manager) GetConnBySession(session string) *websocket.Conn {
+	if session == "" {
+		return nil
+	}
+	v, ok := f.connMap.Load(session)
+	if !ok || v == nil {
+		return nil
+	}
+	conn, ok := v.(*websocket.Conn)
+	if !ok {
+		return nil
+	}
+	return conn
+}
+
 //accept websocket connect
 func (f *Manager) Accept(
 						session string,

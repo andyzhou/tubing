@@ -14,7 +14,7 @@ const (
 
 //command config define
 type (
-	AppConfig struct {
+	AppEnvConfig struct {
 		HttpPort int
 		TcpPort int
 		ConfigPath string
@@ -22,19 +22,19 @@ type (
 	}
 )
 
-func (c *AppConfig) GetHttpPort() int {
+func (c *AppEnvConfig) GetHttpPort() int {
 	return c.HttpPort
 }
 
-func (c *AppConfig) GetTcpPort() int {
+func (c *AppEnvConfig) GetTcpPort() int {
 	return c.TcpPort
 }
 
-func (c *AppConfig) GetConfigPath() string {
+func (c *AppEnvConfig) GetConfigPath() string {
 	return c.ConfigPath
 }
 
-func (c *AppConfig) GetEnv() string {
+func (c *AppEnvConfig) GetEnv() string {
 	return c.Env
 }
 

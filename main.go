@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"tubing/cmd"
 	"tubing/define"
+	"tubing/lib/cmd"
 	"tubing/server"
 )
 
@@ -33,11 +33,11 @@ func startApp(c *cli.Context) error {
 	go signalProcess()
 	log.Printf("start %v..\n", c.App.Name)
 
-	//get app config
-	appConf := cmd.GetAppConfig(c)
+	//get app env config
+	appEnvConf := cmd.GetEnvConfigOnce(c)
 
 	//init inter servers
-	server := server.NewServer(appConf)
+	server := server.NewServer(appEnvConf)
 	server.Start()
 	return nil
 }

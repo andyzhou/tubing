@@ -1,7 +1,7 @@
 package server
 
 import (
-	"tubing/cmd"
+	"tubing/lib/cmd"
 )
 
 /*
@@ -14,7 +14,7 @@ type Server struct {
 }
 
 //construct
-func NewServer(appCfg *cmd.AppConfig) *Server {
+func NewServer(appCfg *cmd.AppEnvConfig) *Server {
 	this := &Server{
 		httpServer: NewHttpServer(appCfg.HttpPort),
 	}

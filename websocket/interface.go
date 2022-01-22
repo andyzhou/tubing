@@ -11,6 +11,7 @@ import (
 
 //interface of manager
 type IConnManager interface {
+	GetConnBySession(session string) *websocket.Conn
 	Accept(session string, conn *websocket.Conn) (IWSConn, error)
 	CloseWithMessage(conn *websocket.Conn, message string) error
 	CloseConn(session string) error

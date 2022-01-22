@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"tubing/base"
 	"tubing/define"
+	"tubing/lib/client"
 	ws "tubing/websocket"
 )
 
@@ -110,8 +111,19 @@ func (f *WebSocket) processConn(c *gin.Context) {
 }
 
 //process request, include read, write, etc.
-//run as son process
-func (f *WebSocket) processRequest(session string, wsConn ws.IWSConn, nb *base.NetBase) {
+//run as son process, one conn one process
+func (f *WebSocket) processRequest(
+						session string,
+						wsConn ws.IWSConn,
+						nb *base.NetBase,
+					) {
+	var (
+		wsClient *client.WebSocketClient
+		messageType int
+		message []byte
+		err error
+	)
+
 	//defer
 	defer func() {
 		if err := recover(); err != nil {
@@ -121,10 +133,13 @@ func (f *WebSocket) processRequest(session string, wsConn ws.IWSConn, nb *base.N
 		f.connManager.CloseConn(session)
 	}()
 
+	//create websocket client for target server
+	wsClient = f.createClient(session)
+
 	//loop select
 	for {
 		//read original websocket data
-		_, _, err := wsConn.Read()
+		messageType, message, err = wsConn.Read()
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("WebSocketServer:processRequest, read EOF need close.")
@@ -133,8 +148,34 @@ func (f *WebSocket) processRequest(session string, wsConn ws.IWSConn, nb *base.N
 			log.Printf("WebSocketServer:processRequest, read err:%v", err.Error())
 			return
 		}
-		//try unmarshal message data
+		//send origin message to target server
+		err = wsClient.SendMessage(messageType, message)
+		if err != nil {
+			log.Printf("WebSocketServer:processRequest, send target failed, err:%v",
+						err.Error())
+		}
 	}
+}
+
+//read cb for websocket client
+func (f *WebSocket) cbForClientRead(session string, msg *client.WebSocketMessage) {
+	//get original ws conn by session?
+	conn := f.connManager.GetConnBySession(session)
+	if conn == nil {
+		return
+	}
+	//send to origin conn
+	err := conn.WriteMessage(msg.MessageType, msg.Message)
+	if err != nil {
+		log.Printf("WebSocket:cbForClientRead failed, err:%v", err.Error())
+	}
+}
+
+//create websocket client
+func (f *WebSocket) createClient(session string) *client.WebSocketClient {
+	wsClient := client.NewWebSocketClient()
+	wsClient.SetCBForRead(f.cbForClientRead)
+	return wsClient
 }
 
 //inter init

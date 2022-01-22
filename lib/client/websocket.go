@@ -143,8 +143,8 @@ func (f *WebSocketClient) SetCBForRead(cb func(session string, msg *WebSocketMes
 func (f *WebSocketClient) runMainProcess() {
 	var (
 		readMessage, writeMessage WebSocketMessage
-		isOk bool
-		err error
+		isOk                      bool
+		err                       error
 	)
 	//defer
 	defer func() {

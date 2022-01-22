@@ -21,8 +21,6 @@ const (
 //request path
 const (
 	AnyPath = "any"
-	ModulePath = "module"
-	SubModulePath = "sub"
 )
 
 //default value

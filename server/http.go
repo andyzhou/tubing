@@ -9,6 +9,7 @@ import (
 
 /*
  * http server
+ * - include gen and websocket
  */
 
 //server info

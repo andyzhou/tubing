@@ -11,7 +11,7 @@ import (
  */
 
 var (
-	appConfig *AppConfig
+	appEnvConfig *AppEnvConfig
 	appConfigOnce sync.Once
 )
 
@@ -25,15 +25,18 @@ func Flags() []cli.Flag {
 	}
 }
 
-//get app config single instance
-func GetAppConfig(c *cli.Context) *AppConfig {
+//get app env config single instance
+func GetEnvConfig() *AppEnvConfig {
+	return appEnvConfig
+}
+func GetEnvConfigOnce(c *cli.Context) *AppEnvConfig {
 	appConfigOnce.Do(func() {
-		appConfig = &AppConfig{
+		appEnvConfig = &AppEnvConfig{
 			HttpPort: c.Int(NameOfHttpPort),
 			TcpPort: c.Int(NameOfTcpPort),
 			ConfigPath: c.String(NameOfConfPath),
 			Env: c.String(NameOfEnv),
 		}
 	})
-	return appConfig
+	return appEnvConfig
 }
