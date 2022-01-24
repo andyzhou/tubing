@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sync"
 	"tubing/define"
 )
 
@@ -17,24 +18,34 @@ import (
  * - persistent connect
  */
 
+//global variable
+var (
+	wsClient *WebSocketClient
+	wsClientOnce sync.Once
+)
+
 //message info
 type WebSocketMessage struct {
 	MessageType int
 	Message []byte
 }
 
-//client info
-type WebSocketClient struct {
-	//public property
+type WebSocketConnPara struct {
 	Host string
 	Port int
 	Uri  string
 	Session string //bound session
+	OrgConn *websocket.Conn
+}
+
+//client info
+type oneWSClient struct {
+	//public property
+	connPara WebSocketConnPara
 
 	//private property
 	u *url.URL
 	conn *websocket.Conn
-	cbForRead func(session string, msg *WebSocketMessage)
 	interrupt chan os.Signal
 	readChan chan WebSocketMessage
 	writeChan chan WebSocketMessage
@@ -43,35 +54,76 @@ type WebSocketClient struct {
 	hasClosed bool
 }
 
+//inter websocket manager
+type WebSocketClient struct {
+	clients sync.Map //session -> oneWSClient, c2s
+	orgConn sync.Map //session -> orgConn, s2c
+}
+
+//get single instance
+func GetWSClient() *WebSocketClient {
+	wsClientOnce.Do(func() {
+		wsClient = NewWebSocketClient()
+	})
+	return wsClient
+}
+
 //construct
 func NewWebSocketClient() *WebSocketClient {
 	this := &WebSocketClient{
+	}
+	return this
+}
+
+//create new c2s client
+//client connect the target server
+func (f *WebSocketClient) CreateClient(connPara *WebSocketConnPara) (*oneWSClient, error) {
+	return newOneWSClient(connPara)
+}
+
+//close connect
+func (f *WebSocketClient) Close(session string) {
+	if session == "" {
+		return
+	}
+	oneWSClient := f.getOneWSClient(session)
+	if oneWSClient == nil {
+		return
+	}
+	oneWSClient.close()
+}
+
+//////////////////
+//private func
+//////////////////
+
+//get one websocket client by session
+func (f *WebSocketClient) getOneWSClient(session string) *oneWSClient {
+	v, ok := f.clients.Load()
+	return nil
+}
+
+//////////////////////
+//api for oneWSClient
+/////////////////////
+
+func newOneWSClient(connPara *WebSocketConnPara) (*oneWSClient, error) {
+	//self init
+	this := &oneWSClient{
+		connPara: *connPara,
 		interrupt: make(chan os.Signal, 1),
 		readChan: make(chan WebSocketMessage, define.DefaultChanSize),
 		writeChan: make(chan WebSocketMessage, define.DefaultChanSize),
 		doneChan: make(chan struct{}),
 		closeChan: make(chan bool, 1),
 	}
-	return this
-}
-
-//close
-func (f *WebSocketClient) Close() {
-	if f.conn == nil {
-		return
-	}
-	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("WebSocketClient:Close panic, err:%v", err)
-		}
-	}()
-	select {
-	case f.closeChan <- true:
-	}
+	//dial server
+	err := this.dialServer()
+	return this, err
 }
 
 //send message data
-func (f *WebSocketClient) SendMessage(messageType int, message[]byte) error {
+func (f *oneWSClient) SendMessage(messageType int, message[]byte) error {
 	//check
 	if message == nil {
 		return errors.New("invalid parameter")
@@ -97,14 +149,33 @@ func (f *WebSocketClient) SendMessage(messageType int, message[]byte) error {
 	return nil
 }
 
+///////////////
+//private func
+///////////////
+
+//close
+func (f *oneWSClient) close() {
+	if f.conn == nil {
+		return
+	}
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("WebSocketClient:Close panic, err:%v", err)
+		}
+	}()
+	select {
+	case f.closeChan <- true:
+	}
+}
+
 //dial server
-func (f *WebSocketClient) DialServer() error {
+func (f *oneWSClient) dialServer() error {
 	//check and init url
 	if f.u == nil {
 		f.u = &url.URL{
 			Scheme: "ws",
-			Host: fmt.Sprintf("%s:%d", f.Host, f.Port),
-			Path: f.Uri,
+			Host: fmt.Sprintf("%s:%d", f.connPara.Host, f.connPara.Port),
+			Path: f.connPara.Uri,
 		}
 	}
 
@@ -126,21 +197,13 @@ func (f *WebSocketClient) DialServer() error {
 	return nil
 }
 
-//set cb for read data
-func (f *WebSocketClient) SetCBForRead(cb func(session string, msg *WebSocketMessage)) bool {
-	if cb == nil {
-		return false
-	}
-	f.cbForRead = cb
-	return true
+//cb for read message from target server
+func (f *oneWSClient) cbForReadMessage(message *WebSocketMessage) error {
+	return nil
 }
 
-///////////////
-//private func
-///////////////
-
 //son process for send and receive
-func (f *WebSocketClient) runMainProcess() {
+func (f *oneWSClient) runMainProcess() {
 	var (
 		readMessage, writeMessage WebSocketMessage
 		isOk                      bool
@@ -162,9 +225,7 @@ func (f *WebSocketClient) runMainProcess() {
 		case readMessage, isOk = <- f.readChan:
 			if isOk {
 				//read original message
-				if f.cbForRead != nil {
-					f.cbForRead(f.Session, &readMessage)
-				}
+				f.cbForReadMessage(&readMessage)
 			}
 		case writeMessage, isOk = <- f.writeChan:
 			if isOk {
@@ -203,7 +264,7 @@ func (f *WebSocketClient) runMainProcess() {
 }
 
 //read message from remote server
-func (f *WebSocketClient) readMessageFromServer(done chan struct{}) {
+func (f *oneWSClient) readMessageFromServer(done chan struct{}) {
 	var (
 		messageType int
 		message []byte
