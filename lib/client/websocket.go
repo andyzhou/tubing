@@ -99,8 +99,15 @@ func (f *WebSocketClient) Close(session string) {
 
 //get one websocket client by session
 func (f *WebSocketClient) getOneWSClient(session string) *oneWSClient {
-	v, ok := f.clients.Load()
-	return nil
+	v, ok := f.clients.Load(session)
+	if !ok || v == nil {
+		return nil
+	}
+	conn, ok := v.(*oneWSClient)
+	if !ok {
+		return nil
+	}
+	return conn
 }
 
 //////////////////////
