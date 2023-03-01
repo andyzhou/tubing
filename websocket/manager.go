@@ -18,6 +18,7 @@ type Manager struct {
 //construct
 func NewManager() *Manager {
 	this := &Manager{
+		connMap: sync.Map{},
 	}
 	return this
 }

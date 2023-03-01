@@ -1,2 +1,2 @@
 # tubing
-http, web socket proxy
+http, web socket proxy library

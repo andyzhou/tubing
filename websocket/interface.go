@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 )
@@ -8,6 +9,11 @@ import (
 /*
  * websocket relate interface define
  */
+
+//interface of router
+type IRouter interface {
+	Entry(c *gin.Context)
+}
 
 //interface of manager
 type IConnManager interface {

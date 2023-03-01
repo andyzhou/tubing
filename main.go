@@ -1,4 +1,4 @@
-package main
+package tubing
 
 import (
 	"github.com/urfave/cli"
@@ -39,6 +39,7 @@ func startApp(c *cli.Context) error {
 	//init inter servers
 	server := server.NewServer(appEnvConf)
 	server.Start()
+	log.Printf("start %v done..\n", c.App.Name)
 	return nil
 }
 
@@ -58,7 +59,7 @@ func main() {
 	//start app
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatalf("%v run failed, err:%v", define.AppName, err.Error())
+		log.Fatalf("%v run failed, err:%v\n", define.AppName, err.Error())
 		return
 	}
 }
