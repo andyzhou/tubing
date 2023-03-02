@@ -13,7 +13,7 @@ import (
 
 //manager info
 type Manager struct {
-	connMap sync.Map //session -> wsConn
+	connMap sync.Map //session -> IWSConn
 }
 
 //construct
@@ -44,11 +44,11 @@ func (f *Manager) SendMessage(messageType int, message []byte, sessions ... stri
 		return errors.New("invalid parameter")
 	}
 	for _, session := range sessions {
-		conn := f.GetConnBySession(session)
-		if conn == nil {
+		conn, err := f.GetConn(session)
+		if err != nil || conn == nil {
 			continue
 		}
-		conn.WriteMessage(messageType, message)
+		conn.Write(messageType, message)
 	}
 	return nil
 }
@@ -82,19 +82,19 @@ func (f *Manager) CastMessage(messageType int, message []byte, tags ...string) e
 }
 
 //get conn by session
-func (f *Manager) GetConnBySession(session string) *websocket.Conn {
+func (f *Manager) GetConn(session string) (IWSConn, error) {
 	if session == "" {
-		return nil
+		return nil, errors.New("invalid parameter")
 	}
 	v, ok := f.connMap.Load(session)
 	if !ok || v == nil {
-		return nil
+		return nil, errors.New("no such connect")
 	}
-	conn, ok := v.(*websocket.Conn)
+	conn, ok := v.(IWSConn)
 	if !ok {
-		return nil
+		return nil, errors.New("invalid ws connect")
 	}
-	return conn
+	return conn, nil
 }
 
 //accept websocket connect
@@ -106,7 +106,6 @@ func (f *Manager) Accept(
 	if session == "" || conn == nil {
 		return nil, errors.New("invalid parameter")
 	}
-
 	//check session, todo..
 
 	//init new connect

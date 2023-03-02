@@ -35,17 +35,28 @@ func signalProcess() {
 	os.Exit(1)
 }
 
-//cb for ws
+//cb for ws first connect
 func cbForConnected(session string, para map[string]interface{}) error {
 	log.Printf("cbForConnected, session:%v, para:%v\n", session, para)
+	//cast history to new conn, todo..
+	conn, err := tb.GetConn(session)
+	if err != nil || conn == nil {
+		log.Printf("cbForConnected, session:%v, get conn failed, err:%v\n", session, err)
+	}
+	messageType := 1
+	message := []byte("welcome")
+	err = conn.Write(messageType, message)
+	log.Printf("cbForConnected, session:%v, send result:%v\n", session, err)
 	return nil
 }
 
+//cb for ws close connect
 func cbForClosed(session string) error {
 	log.Printf("cbForClosed, session:%v\n", session)
 	return nil
 }
 
+//cb for ws read message
 func cbForRead(session string, messageType int, message []byte) error {
 	log.Printf("cbForRead, session:%v, messageType:%v, message:%v\n",
 		session, messageType, string(message))

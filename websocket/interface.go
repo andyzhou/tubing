@@ -21,7 +21,7 @@ type IConnManager interface {
 	Close()
 	SendMessage(messageType int, message []byte, sessions ... string) error
 	CastMessage(messageType int, message []byte, tags ...string) error
-	GetConnBySession(session string) *websocket.Conn
+	GetConn(session string) (IWSConn, error)
 	Accept(session string, conn *websocket.Conn) (IWSConn, error)
 	CloseWithMessage(conn *websocket.Conn, message string) error
 	CloseConn(sessions ...string) error

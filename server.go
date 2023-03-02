@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	ws "github.com/gorilla/websocket"
 	"sync"
 	"tubing/websocket"
 )
@@ -131,7 +130,7 @@ func (f *Server) StartGin(port int) error {
 }
 
 //get conn by session
-func (f *Server) GetConnBySession(session string) (*ws.Conn, error) {
+func (f *Server) GetConn(session string) (websocket.IWSConn, error) {
 	//check
 	if session == "" {
 		return nil, errors.New("invalid parameter")
@@ -140,8 +139,8 @@ func (f *Server) GetConnBySession(session string) (*ws.Conn, error) {
 		return nil, errors.New("router hasn't registered")
 	}
 	//try get websocket connect
-	conn := f.router.GetManager().GetConnBySession(session)
-	return conn, nil
+	conn, err := f.router.GetManager().GetConn(session)
+	return conn, err
 }
 
 //close sessions

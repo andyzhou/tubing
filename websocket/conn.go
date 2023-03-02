@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	"sync"
+	"time"
 )
 
 /*
@@ -14,6 +15,7 @@ import (
 type WSConn struct {
 	conn *websocket.Conn
 	tags []string
+	activeTime int64
 	sync.RWMutex
 }
 
@@ -45,6 +47,7 @@ func (f *WSConn) MarkTag(tags ...string) error {
 func (f *WSConn) Write(messageType int, data []byte) error {
 	f.Lock()
 	defer f.Unlock()
+	f.activeTime = time.Now().Unix()
 	return f.conn.WriteMessage(messageType, data)
 }
 

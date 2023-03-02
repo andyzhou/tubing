@@ -20,7 +20,7 @@ func sendMessage(c *tubing.OneWSClient) {
 	message := []byte("hello")
 	for {
 		c.SendMessage(messageType, message)
-		time.Sleep(time.Second / 10)
+		time.Sleep(time.Second)
 	}
 }
 
