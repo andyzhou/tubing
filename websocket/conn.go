@@ -51,6 +51,8 @@ func (f *WSConn) Read() (int, []byte, error) {
 
 //close conn
 func (f *WSConn) CloseWithMessage(message string) error {
+	f.Lock()
+	defer f.Unlock()
 	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
 	err := f.conn.WriteMessage(websocket.CloseMessage, msg)
 	if err != nil {

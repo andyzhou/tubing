@@ -41,6 +41,7 @@ func cbForConn(session string) error {
 }
 
 func cbForClosed(session string) error {
+	log.Printf("cbForClosed, session:%v\n", session)
 	return nil
 }
 

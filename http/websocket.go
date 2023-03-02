@@ -80,11 +80,9 @@ func (f *WebSocket) processConn(c *gin.Context) {
 
 	//get key param
 	session := c.Query(define.QueryParaOfSession)
-	contentType := c.Query(define.QueryParaOfContentType)
 
 	//setup net base data
 	netBase := &base.NetBase{
-		ContentType: contentType,
 		ClientIP: c.ClientIP(), //get client id
 	}
 

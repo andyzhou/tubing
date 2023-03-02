@@ -34,10 +34,11 @@ var chatServerAddr = "localhost:8090/ws";
 var chatServerChannel = "test";
 var userId = 1;
 var userNick = "xxxx";
+var userSession = "1234";
 
 $(function() {
   //begin connect chat server
-  chat_server_conn(chatServerAddr, chatServerChannel);
+  chat_server_conn(chatServerAddr, chatServerChannel, userSession);
 
   $("#sendBtn").click(function() {
         chat_message_send("msg");

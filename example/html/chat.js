@@ -106,7 +106,7 @@ function chat_server_message(dataObj) {
 
 
 //connect server
-function chat_server_conn (serverAddr, channel) {
+function chat_server_conn (serverAddr, channel, session) {
     if(typeof(serverAddr) == "undefined" || serverAddr == "") {
         return false;
     }
@@ -122,7 +122,7 @@ function chat_server_conn (serverAddr, channel) {
     //init web socket
    // var chatAddr = "ws://" + serverAddr + "/chat/" + channel;
     //var chatAddr = "ws://adam.abc.com:6600/chat/test"
-    var chatAddr = "ws://" + serverAddr + "?session=123";
+    var chatAddr = "ws://" + serverAddr + "?session=" + session;
     //alert('chatAddr:' + chatAddr);
     wsConn = new WebSocket(chatAddr);
 

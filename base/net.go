@@ -6,6 +6,6 @@ package base
 
 //face info
 type NetBase struct {
-	ContentType string
+	ContentType int
 	ClientIP string
 }
