@@ -3,6 +3,7 @@ package websocket
 import (
 	"errors"
 	"github.com/gorilla/websocket"
+	"reflect"
 	"sync"
 )
 
@@ -53,14 +54,25 @@ func (f *Manager) SendMessage(messageType int, message []byte, sessions ... stri
 }
 
 //cast message
-func (f *Manager) CastMessage(messageType int, message []byte) error {
+func (f *Manager) CastMessage(messageType int, message []byte, tags ...string) error {
 	//check
 	if message == nil {
 		return errors.New("invalid parameter")
 	}
 	sf := func(k, v interface{}) bool {
-		conn, _ := v.(IWSConn)
-		if conn != nil {
+		conn, ok := v.(IWSConn)
+		if !ok || conn == nil {
+			return true
+		}
+		if tags != nil {
+			//filter by tags
+			bRet := reflect.DeepEqual(tags, conn.GetTags())
+			if bRet {
+				//match relate tags
+				conn.Write(messageType, message)
+			}
+		}else{
+			//all
 			conn.Write(messageType, message)
 		}
 		return true
@@ -139,3 +151,7 @@ func (f *Manager) CloseConn(sessions ...string) error {
 	}
 	return nil
 }
+
+///////////////
+//private func
+///////////////

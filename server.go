@@ -173,7 +173,7 @@ func (f *Server) SendMessage(messageType int, message []byte, sessions ... strin
 }
 
 //cast message
-func (f *Server) CastMessage(messageType int, message []byte) error {
+func (f *Server) CastMessage(messageType int, message []byte, tags ... string) error {
 	//check
 	if messageType < 0 || message == nil {
 		return errors.New("invalid parameter")

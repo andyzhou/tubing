@@ -26,6 +26,11 @@ func NewWSConn(conn *websocket.Conn) *WSConn {
 	return this
 }
 
+//get tags
+func (f *WSConn) GetTags() []string {
+	return f.tags
+}
+
 //mark tag
 func (f *WSConn) MarkTag(tags ...string) error {
 	if tags == nil || len(tags) <= 0 {

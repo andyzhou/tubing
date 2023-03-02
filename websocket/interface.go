@@ -20,7 +20,7 @@ type IRouter interface {
 type IConnManager interface {
 	Close()
 	SendMessage(messageType int, message []byte, sessions ... string) error
-	CastMessage(messageType int, message []byte) error
+	CastMessage(messageType int, message []byte, tags ...string) error
 	GetConnBySession(session string) *websocket.Conn
 	Accept(session string, conn *websocket.Conn) (IWSConn, error)
 	CloseWithMessage(conn *websocket.Conn, message string) error
@@ -30,6 +30,7 @@ type IConnManager interface {
 //interface of connect
 type IWSConn interface {
 	//adv
+	GetTags() []string
 	MarkTag(tags ...string) error
 	//base
 	Write(messageType int, data []byte) error
