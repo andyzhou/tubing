@@ -163,9 +163,13 @@ func (f *Router) processRequest(
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("Router:processRequest, read EOF need close.")
-				return
+			}else{
+				log.Printf("Router:processRequest, read err:%v", err.Error())
 			}
-			log.Printf("Router:processRequest, read err:%v", err.Error())
+			//connect closed
+			if f.cbForClosed != nil {
+				f.cbForClosed(session)
+			}
 			return
 		}
 		//check and run cb for read message

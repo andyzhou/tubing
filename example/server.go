@@ -1,15 +1,22 @@
 package main
 
 import (
-	"github.com/andyzhou/tubing/define"
+	"errors"
+	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"tubing"
+	"tubing/define"
 	"tubing/lib/cmd"
+)
+
+var (
+	tb *tubing.Server
 )
 
 //signal watch
@@ -32,11 +39,47 @@ func signalProcess() {
 func cbForConn(session string) error {
 	return nil
 }
+
 func cbForClosed(session string) error {
 	return nil
 }
+
 func cbForRead(session string, messageType int, message []byte) error {
+	log.Printf("cbForRead, session:%v, messageType:%v, message:%v\n",
+		session, messageType, string(message))
+	if tb == nil {
+		return errors.New("tb not init yet")
+	}
+	//cast to all
+	err := tb.CastMessage(messageType, message)
+	if err != nil {
+		log.Println("cast message failed, err:", err.Error())
+		return err
+	}
 	return nil
+}
+
+//show home page
+func showHomePage(ctx *gin.Context) {
+	//out put page
+	tplFile := "chat.tpl"
+	ctx.HTML(http.StatusOK, tplFile, nil)
+}
+
+//create default gin
+func createGin() *gin.Engine {
+	//init default gin and page
+	gin := gin.Default()
+
+	//init templates
+	gin.LoadHTMLGlob("./tpl/*.tpl")
+
+	//init static path
+	gin.Static("/html", "./html")
+
+	//register home request url
+	gin.Any("/", showHomePage)
+	return gin
 }
 
 //start app service
@@ -50,10 +93,12 @@ func startApp(c *cli.Context) error {
 
 	//get app env config
 	//appEnvConf := cmd.GetEnvConfigOnce(c)
-
 	////init inter servers
 	//server := server.NewServer(appEnvConf)
 	//server.Start()
+
+	//init default gin
+	gin := createGin()
 
 	//set router
 	ur := &tubing.UriRouter{
@@ -64,7 +109,8 @@ func startApp(c *cli.Context) error {
 	}
 
 	//init service
-	tb := tubing.GetServer()
+	tb = tubing.GetServer()
+	tb.SetGin(gin)
 	tb.SetRootUri("/ws")
 	err := tb.RegisterUri(ur)
 	if err != nil {

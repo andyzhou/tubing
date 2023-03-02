@@ -96,6 +96,9 @@ func (f *Server) RegisterUri(ur *UriRouter) error {
 
 	//begin register
 	f.gin.GET(f.rootUri, router.Entry)
+
+	//sync inter router
+	f.router = router
 	return nil
 }
 

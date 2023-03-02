@@ -21,7 +21,7 @@ func NewCoder() *Coder {
 }
 
 //encode message
-func (f *Coder) Marshal(contentType string, content proto.Message) ([]byte, error) {
+func (f *Coder) Marshal(contentType int, content proto.Message) ([]byte, error) {
 	var (
 		data []byte
 		err error
@@ -38,7 +38,7 @@ func (f *Coder) Marshal(contentType string, content proto.Message) ([]byte, erro
 }
 
 //decode message
-func (f *Coder) Unmarshal(contentType string, content []byte, req proto.Message) error {
+func (f *Coder) Unmarshal(contentType int, content []byte, req proto.Message) error {
 	var (
 		err error
 	)
