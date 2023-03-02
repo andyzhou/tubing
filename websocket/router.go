@@ -20,8 +20,8 @@ import (
 var (
 	//up grader for http -> websocket
 	upGrader = websocket.Upgrader{
-		ReadBufferSize:    1024 * 5,
-		WriteBufferSize:   1024 * 5,
+		ReadBufferSize:    define.DefaultBuffSize,
+		WriteBufferSize:   define.DefaultBuffSize,
 		EnableCompression: true,
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -31,35 +31,43 @@ var (
 
 //router info
 type Router struct {
-	uri string
 	c *gin.Context
 	connManager *Manager
-	cbForClosed func(uri, session string) error
-	cbForRead func(uri string, messageType int, message []byte) error
+	sessionName string
+	cbForClosed func(session string) error
+	cbForRead func(session string, messageType int, message []byte) error
 }
 
 //construct
-func NewRouter(uri string) *Router {
+func NewRouter() *Router {
 	this := &Router{
-		uri: uri,
 		connManager: NewManager(),
 	}
 	return this
 }
 
 //set cb func
-func (f *Router) SetCBForClosed(cb func(uri, session string) error) {
+func (f *Router) SetCBForClosed(cb func(session string) error) {
 	if cb == nil {
 		return
 	}
 	f.cbForClosed = cb
 }
 
-func (f *Router) SetCBForRead(cb func(uri string, messageType int, message []byte) error) {
+func (f *Router) SetCBForRead(cb func(session string, messageType int, message []byte) error) {
 	if cb == nil {
 		return
 	}
 	f.cbForRead = cb
+}
+
+//set session name
+func (f *Router) SetSessionName(name string) error {
+	if name == "" {
+		return errors.New("invalid parameter")
+	}
+	f.sessionName = name
+	return nil
 }
 
 //entry
@@ -80,12 +88,12 @@ func (f *Router) Entry(c *gin.Context) {
 	writer := c.Writer
 
 	//get key param
-	session := c.Query(define.QueryParaOfSession)
-	contentType := c.Query(define.QueryParaOfContentType)
+	session := c.Query(f.sessionName)
+	//contentType := c.Query(define.QueryParaOfContentType)
 
 	//setup net base data
 	netBase := &base.NetBase{
-		ContentType: contentType,
+		//ContentType: contentType,
 		ClientIP: c.ClientIP(), //get client id
 	}
 
@@ -108,7 +116,7 @@ func (f *Router) Entry(c *gin.Context) {
 			log.Printf("Router:Entry, err:%v\n", err.Error())
 		}
 		if f.cbForClosed != nil {
-			f.cbForClosed(f.uri, session)
+			f.cbForClosed(session)
 		}
 		return
 	}
@@ -117,13 +125,9 @@ func (f *Router) Entry(c *gin.Context) {
 	go f.processRequest(session, wsConn, netBase)
 }
 
-//send message
-func (f *Router) SendMessage(messageType int, message []byte, sessions ...string) error {
-	//check
-	if message == nil || sessions == nil {
-		return errors.New("invalid parameter")
-	}
-	return nil
+//get connect manager
+func (f *Router) GetManager() IConnManager {
+	return f.connManager
 }
 
 //////////////
@@ -166,7 +170,7 @@ func (f *Router) processRequest(
 		}
 		//check and run cb for read message
 		if f.cbForRead != nil {
-			f.cbForRead(f.uri, messageType, message)
+			f.cbForRead(session, messageType, message)
 		}
 	}
 }

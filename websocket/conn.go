@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"errors"
 	"github.com/gorilla/websocket"
 	"sync"
 )
@@ -12,6 +13,7 @@ import (
 //web socket connect info
 type WSConn struct {
 	conn *websocket.Conn
+	tags []string
 	sync.RWMutex
 }
 
@@ -19,8 +21,19 @@ type WSConn struct {
 func NewWSConn(conn *websocket.Conn) *WSConn {
 	this := &WSConn{
 		conn: conn,
+		tags: []string{},
 	}
 	return this
+}
+
+//mark tag
+func (f *WSConn) MarkTag(tags ...string) error {
+	if tags == nil || len(tags) <= 0 {
+		return errors.New("invalid parameter")
+	}
+	f.tags = []string{}
+	f.tags = append(f.tags, tags...)
+	return nil
 }
 
 //write data

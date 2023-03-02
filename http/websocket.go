@@ -148,12 +148,13 @@ func (f *WebSocket) processRequest(
 			log.Printf("WebSocketServer:processRequest, read err:%v", err.Error())
 			return
 		}
-		//send origin message to target server
-		err = wsClient.SendMessage(messageType, message)
-		if err != nil {
-			log.Printf("WebSocketServer:processRequest, send target failed, err:%v",
-						err.Error())
-		}
+		////send origin message to target server
+		//err = wsClient.SendMessage(messageType, message)
+		//if err != nil {
+		//	log.Printf("WebSocketServer:processRequest, send target failed, err:%v",
+		//				err.Error())
+		//}
+		log.Println(wsClient, messageType, message)
 	}
 }
 
@@ -174,7 +175,7 @@ func (f *WebSocket) cbForClientRead(session string, msg *client.WebSocketMessage
 //create websocket client
 func (f *WebSocket) createClient(session string) *client.WebSocketClient {
 	wsClient := client.NewWebSocketClient()
-	wsClient.SetCBForRead(f.cbForClientRead)
+	//wsClient.SetCBForRead(f.cbForClientRead)
 	return wsClient
 }
 
