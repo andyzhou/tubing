@@ -30,22 +30,19 @@ type WebSocketMessage struct {
 	Message []byte
 }
 
+//connect para info
 type WebSocketConnPara struct {
 	Host string
 	Port int
-	Uri  string
-	Session string //bound session
-	QueryPara map[string]interface{} //key -> val
-	OrgConn *websocket.Conn //this will be removed!!
+	Uri  string //websocket root uri
+	QueryPara map[string]interface{} //raw query, key -> val
+	//cb func
 	CBForReadMessage func(message *WebSocketMessage) error
 }
 
 //client info
 type OneWSClient struct {
-	//public property
 	connPara WebSocketConnPara
-
-	//private property
 	u *url.URL
 	conn *websocket.Conn
 	interrupt chan os.Signal
@@ -62,7 +59,6 @@ type OneWSClient struct {
 //inter websocket manager
 type WebSocketClient struct {
 	clients sync.Map //session -> OneWSClient, c2s
-	orgConn sync.Map //session -> orgConn, s2c
 }
 
 //get single instance
@@ -183,6 +179,15 @@ func (f *OneWSClient) close() {
 
 //dial server
 func (f *OneWSClient) dialServer() error {
+	//defer
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("OneWSClient:dialServer panic, err:", err)
+			//init interrupt
+			signal.Notify(f.interrupt, os.Interrupt)
+		}
+	}()
+
 	//check and init url
 	if f.u == nil {
 		//init url
@@ -206,9 +211,6 @@ func (f *OneWSClient) dialServer() error {
 	if err != nil {
 		return err
 	}
-
-	//init interrupt
-	signal.Notify(f.interrupt, os.Interrupt)
 
 	//sync object
 	f.conn = conn

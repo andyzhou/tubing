@@ -22,9 +22,9 @@ var (
 //info for router cb
 type UriRouter struct {
 	SessionName string
+	CBForConnected func(session string, para map[string]interface{}) error
 	CBForClosed func(session string) error
 	CBForRead func(session string, messageType int, message []byte) error
-	CBForConn func(session string) error
 }
 
 //face info
@@ -91,6 +91,7 @@ func (f *Server) RegisterUri(ur *UriRouter) error {
 	//init new router
 	router := websocket.NewRouter()
 	router.SetSessionName(ur.SessionName)
+	router.SetCBForConnected(ur.CBForConnected)
 	router.SetCBForClosed(ur.CBForClosed)
 	router.SetCBForRead(ur.CBForRead)
 

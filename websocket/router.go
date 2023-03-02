@@ -34,6 +34,7 @@ type Router struct {
 	c *gin.Context
 	connManager *Manager
 	sessionName string
+	cbForConnected func(session string, para map[string]interface{}) error
 	cbForClosed func(session string) error
 	cbForRead func(session string, messageType int, message []byte) error
 }
@@ -47,6 +48,13 @@ func NewRouter() *Router {
 }
 
 //set cb func
+func (f *Router) SetCBForConnected(cb func(session string, para map[string]interface{}) error) {
+	if cb == nil {
+		return
+	}
+	f.cbForConnected = cb
+}
+
 func (f *Router) SetCBForClosed(cb func(session string) error) {
 	if cb == nil {
 		return
@@ -89,7 +97,9 @@ func (f *Router) Entry(c *gin.Context) {
 
 	//get key param
 	session := c.Query(f.sessionName)
-	//contentType := c.Query(define.QueryParaOfContentType)
+
+	//get all para
+	paraValMap := c.Request.URL.Query()
 
 	//setup net base data
 	netBase := &base.NetBase{
@@ -119,6 +129,15 @@ func (f *Router) Entry(c *gin.Context) {
 			f.cbForClosed(session)
 		}
 		return
+	}
+
+	//cb connect
+	if f.cbForConnected != nil {
+		paraMap := map[string]interface{}{}
+		for k, v := range paraValMap {
+			paraMap[k] = v
+		}
+		f.cbForConnected(session, paraMap)
 	}
 
 	//spawn son process for request

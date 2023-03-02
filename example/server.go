@@ -36,7 +36,8 @@ func signalProcess() {
 }
 
 //cb for ws
-func cbForConn(session string) error {
+func cbForConnected(session string, para map[string]interface{}) error {
+	log.Printf("cbForConnected, session:%v, para:%v\n", session, para)
 	return nil
 }
 
@@ -104,9 +105,9 @@ func startApp(c *cli.Context) error {
 	//set router
 	ur := &tubing.UriRouter{
 		SessionName: define.QueryParaOfSession,
-		CBForConn: cbForConn,
-		CBForRead: cbForRead,
+		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,
+		CBForRead: cbForRead,
 	}
 
 	//init service
