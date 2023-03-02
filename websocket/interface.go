@@ -14,6 +14,7 @@ import (
 type IRouter interface {
 	Entry(c *gin.Context)
 	GetManager() IConnManager
+	GetCoder() *Coder
 }
 
 //interface of manager

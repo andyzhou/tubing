@@ -34,6 +34,7 @@ type Router struct {
 	c *gin.Context
 	connManager *Manager
 	sessionName string
+	cd *Coder
 	cbForConnected func(session string, para map[string]interface{}) error
 	cbForClosed func(session string) error
 	cbForRead func(session string, messageType int, message []byte) error
@@ -43,6 +44,7 @@ type Router struct {
 func NewRouter() *Router {
 	this := &Router{
 		connManager: NewManager(),
+		cd: NewCoder(),
 	}
 	return this
 }
@@ -76,6 +78,11 @@ func (f *Router) SetSessionName(name string) error {
 	}
 	f.sessionName = name
 	return nil
+}
+
+//get coder
+func (f *Router) GetCoder() *Coder {
+	return f.cd
 }
 
 //entry

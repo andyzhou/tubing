@@ -52,6 +52,11 @@ func NewServer(gs ... *gin.Engine) *Server {
 	return this
 }
 
+//get coder
+func (f *Server) GetCoder() *websocket.Coder {
+	return f.router.GetCoder()
+}
+
 //set gin
 func (f *Server) SetGin(g *gin.Engine) error {
 	if g == nil {
