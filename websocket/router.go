@@ -144,7 +144,16 @@ func (f *Router) Entry(c *gin.Context) {
 		for k, v := range paraValMap {
 			paraMap[k] = v
 		}
-		f.cbForConnected(session, paraMap)
+		err = f.cbForConnected(session, paraMap)
+		if err != nil {
+			log.Printf("Router:Entry, cbForConnected err:%v\n", err.Error())
+			//call cb connected failed, force close connect
+			f.connManager.CloseWithMessage(conn, err.Error())
+			if f.cbForClosed != nil {
+				f.cbForClosed(session)
+			}
+			return
+		}
 	}
 
 	//spawn son process for request
