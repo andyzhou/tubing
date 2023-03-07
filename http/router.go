@@ -2,12 +2,12 @@ package http
 
 import (
 	"fmt"
+	"github.com/andyzhou/tubing/define"
+	"github.com/andyzhou/tubing/lib/client"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"strings"
-	"tubing/define"
-	"tubing/lib/client"
 )
 
 /*

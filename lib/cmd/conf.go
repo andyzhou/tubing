@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/urfave/cli"
 	"sync"
-	"tubing/define"
+	"github.com/andyzhou/tubing/define"
 )
 
 /*

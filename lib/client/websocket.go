@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
 	"io"
 	"log"
@@ -10,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"sync"
-	"tubing/define"
 )
 
 /*

@@ -1,9 +1,9 @@
 package http
 
 import (
+	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
 	"net/url"
-	"tubing/define"
 )
 
 /*

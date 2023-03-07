@@ -2,14 +2,14 @@ package websocket
 
 import (
 	"errors"
+	"github.com/andyzhou/tubing/base"
+	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"io"
 	"log"
 	"net/http"
 	"runtime/debug"
-	"tubing/base"
-	"tubing/define"
 )
 
 /*

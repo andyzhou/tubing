@@ -1,16 +1,16 @@
 package http
 
 import (
+	"github.com/andyzhou/tubing/base"
+	"github.com/andyzhou/tubing/define"
+	"github.com/andyzhou/tubing/lib/client"
+	ws "github.com/andyzhou/tubing/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"io"
 	"log"
 	"net/http"
 	"runtime/debug"
-	"tubing/base"
-	"tubing/define"
-	"tubing/lib/client"
-	ws "tubing/websocket"
 )
 
 /*

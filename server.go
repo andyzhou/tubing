@@ -3,9 +3,9 @@ package tubing
 import (
 	"errors"
 	"fmt"
+	"github.com/andyzhou/tubing/websocket"
 	"github.com/gin-gonic/gin"
 	"sync"
-	"tubing/websocket"
 )
 
 /*

@@ -3,11 +3,11 @@ package client
 import (
 	"errors"
 	"fmt"
+	"github.com/andyzhou/tubing/define"
 	"github.com/valyala/fasthttp"
 	"log"
 	"sync"
 	"time"
-	"tubing/define"
 )
 
 /*

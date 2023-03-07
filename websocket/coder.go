@@ -3,8 +3,8 @@ package websocket
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/andyzhou/tubing/define"
 	"google.golang.org/protobuf/proto"
-	"tubing/define"
 )
 
 /*

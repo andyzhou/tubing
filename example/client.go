@@ -1,11 +1,11 @@
 package main
 
 import (
+	"github.com/andyzhou/tubing"
+	"github.com/andyzhou/tubing/define"
 	"log"
 	"sync"
 	"time"
-	"tubing"
-	"tubing/define"
 )
 
 //read message

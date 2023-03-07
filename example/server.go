@@ -2,6 +2,9 @@ package main
 
 import (
 	"errors"
+	"github.com/andyzhou/tubing"
+	"github.com/andyzhou/tubing/define"
+	"github.com/andyzhou/tubing/lib/cmd"
 	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli"
 	"log"
@@ -10,9 +13,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"tubing"
-	"tubing/define"
-	"tubing/lib/cmd"
 )
 
 var (
