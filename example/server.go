@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/andyzhou/tubing"
 	"github.com/andyzhou/tubing/define"
-	"github.com/andyzhou/tubing/lib/cmd"
 	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli"
 	"log"
@@ -142,16 +141,12 @@ func startApp(c *cli.Context) error {
 }
 
 func main() {
-	//get command flags
-	flags := cmd.Flags()
-
 	//init app
 	app := &cli.App{
 		Name: define.AppName,
 		Action: func(c *cli.Context) error {
 			return startApp(c)
 		},
-		Flags: flags,
 	}
 
 	//start app

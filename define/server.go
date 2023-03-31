@@ -26,11 +26,6 @@ const (
 //default value
 const (
 	AppName = "tubing"
-	DefaultIniPath = "./ini"
-	AppHttpPort = 8686
-	AppTcpPort = 8585
-	ReqTimeOutSeconds = 10
-	ReqMaxConn = 256
 )
 
 const (

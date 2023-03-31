@@ -54,6 +54,7 @@ type OneWSClient struct {
 
 	//cb func
 	cbForReadMessage func(message *WebSocketMessage) error
+	cbForClosed func() error
 }
 
 //inter websocket manager

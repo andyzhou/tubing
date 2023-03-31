@@ -3,7 +3,8 @@ package tubing
 import (
 	"errors"
 	"fmt"
-	"github.com/andyzhou/tubing/websocket"
+	"github.com/andyzhou/tubing/define"
+	"github.com/andyzhou/tubing/face"
 	"github.com/gin-gonic/gin"
 	"sync"
 )
@@ -28,9 +29,10 @@ type UriRouter struct {
 
 //face info
 type Server struct {
-	gin *gin.Engine
-	rootUri string //root websocket uri
-	router websocket.IRouter //router interface
+	gin     *gin.Engine
+	rootUri string       //root websocket uri
+	router  face.IRouter //router interface
+	started bool
 }
 
 //get single instance
@@ -53,7 +55,7 @@ func NewServer(gs ... *gin.Engine) *Server {
 }
 
 //get coder
-func (f *Server) GetCoder() *websocket.Coder {
+func (f *Server) GetCoder() *face.Coder {
 	return f.router.GetCoder()
 }
 
@@ -77,7 +79,8 @@ func (f *Server) SetRootUri(uri string) error {
 }
 
 //register websocket uri, STEP-2
-func (f *Server) RegisterUri(ur *UriRouter) error {
+//methods include `GET` or `POST`
+func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	//check
 	if ur == nil || ur.SessionName == "" {
 		return errors.New("invalid parameter")
@@ -92,15 +95,28 @@ func (f *Server) RegisterUri(ur *UriRouter) error {
 		return errors.New("router had registered")
 	}
 
+	//setup method
+	method := define.ReqMethodOfGet
+	if methods != nil && len(methods) > 0 {
+		method = methods[0]
+	}
+
 	//init new router
-	router := websocket.NewRouter()
+	router := face.NewRouter()
+
+	//setup relate key data and callbacks
 	router.SetSessionName(ur.SessionName)
 	router.SetCBForConnected(ur.CBForConnected)
 	router.SetCBForClosed(ur.CBForClosed)
 	router.SetCBForRead(ur.CBForRead)
 
 	//begin register
-	f.gin.GET(f.rootUri, router.Entry)
+	switch method {
+	case define.ReqMethodOfPost:
+		f.gin.POST(f.rootUri, router.Entry)
+	default:
+		f.gin.GET(f.rootUri, router.Entry)
+	}
 
 	//sync inter router
 	f.router = router
@@ -128,14 +144,18 @@ func (f *Server) StartGin(port int) error {
 	if f.gin == nil {
 		return errors.New("gin hadn't init yet")
 	}
+	if f.started {
+		return errors.New("server had started")
+	}
 	//start server
 	serverAddr := fmt.Sprintf(":%v", port)
 	go f.gin.Run(serverAddr)
+	f.started = true
 	return nil
 }
 
 //get conn by session
-func (f *Server) GetConn(session string) (websocket.IWSConn, error) {
+func (f *Server) GetConn(session string) (face.IWSConn, error) {
 	//check
 	if session == "" {
 		return nil, errors.New("invalid parameter")

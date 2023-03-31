@@ -1,5 +1,5 @@
 # tubing
-http, web socket proxy library
+http, web socket proxy library, base one gin.
 
 - server.go
   - used for server side
