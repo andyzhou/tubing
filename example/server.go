@@ -125,15 +125,15 @@ func startApp(c *cli.Context) error {
 		CBForRead: cbForRead,
 	}
 
-	//set pattern names
-	patternNames := []string{
-		"module",
-	}
+	////set pattern names
+	//patternNames := []string{
+	//	"module",
+	//}
 
 	//init service
 	tb = tubing.GetServer()
 	tb.SetGin(gin)
-	tb.SetRootUriPattern("/ws", patternNames...)
+	tb.SetRootUriPattern("/ws")
 	err := tb.RegisterUri(ur)
 	if err != nil {
 		return err

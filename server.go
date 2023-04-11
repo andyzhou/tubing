@@ -1,7 +1,6 @@
 package tubing
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/andyzhou/tubing/define"
@@ -89,25 +88,22 @@ func (f *Server) SetGin(g *gin.Engine) error {
 }
 
 //set root uri, STEP-1
-func (f *Server) SetRootUriPattern(
-			rootUri string,
-			patternNames ...string) error {
+func (f *Server) SetRootUriPattern(rootUri string) error {
 	//check
 	if rootUri == "" {
 		return errors.New("invalid parameter")
 	}
 	//set root uri pattern
-	if patternNames != nil {
-		bf := bytes.NewBuffer(nil)
-		bf.WriteString(rootUri)
-		for _, patternName := range patternNames {
-			tmp := fmt.Sprintf("/{:%s}", patternName)
-			bf.WriteString(tmp)
-		}
-		f.rootUri = bf.String()
-	}else{
-		f.rootUri = rootUri
-	}
+	f.rootUri = rootUri
+	//if patternNames != nil {
+	//	bf := bytes.NewBuffer(nil)
+	//	bf.WriteString(rootUri)
+	//	for _, patternName := range patternNames {
+	//		tmp := fmt.Sprintf("/{:%s}", patternName)
+	//		bf.WriteString(tmp)
+	//	}
+	//	f.rootUri = bf.String()
+	//}
 	return nil
 }
 
