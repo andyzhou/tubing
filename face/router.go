@@ -32,9 +32,9 @@ var (
 //router info
 type Router struct {
 	c *gin.Context
-	connManager *Manager
+	connManager IConnManager
 	sessionName string
-	cd *Coder
+	cd ICoder
 	cbForConnected func(session string, para map[string]interface{}) error
 	cbForClosed func(session string) error
 	cbForRead func(session string, messageType int, message []byte) error
@@ -83,8 +83,13 @@ func (f *Router) SetSessionName(name string) error {
 }
 
 //get coder
-func (f *Router) GetCoder() *Coder {
+func (f *Router) GetCoder() ICoder {
 	return f.cd
+}
+
+//get pattern para
+func (f *Router) GetPatternPara(name string) string {
+	return f.c.Param(name)
 }
 
 //entry

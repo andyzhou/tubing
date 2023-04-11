@@ -123,7 +123,7 @@ func startApp(c *cli.Context) error {
 	//init service
 	tb = tubing.GetServer()
 	tb.SetGin(gin)
-	tb.SetRootUri("/ws")
+	tb.SetRootUriPattern("/ws")
 	err := tb.RegisterUri(ur)
 	if err != nil {
 		return err

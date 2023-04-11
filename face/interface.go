@@ -13,8 +13,9 @@ import (
 //interface of router
 type IRouter interface {
 	Entry(c *gin.Context)
+	GetPatternPara(name string) string
 	GetManager() IConnManager
-	GetCoder() *Coder
+	GetCoder() ICoder
 }
 
 //interface of manager
@@ -42,6 +43,6 @@ type IWSConn interface {
 
 //interface for message en/decoder
 type ICoder interface {
-	Marshal(contentType string, content proto.Message) ([]byte, error)
-	Unmarshal(contentType string, content []byte, req proto.Message) error
+	Marshal(contentType int, content proto.Message) ([]byte, error)
+	Unmarshal(contentType int, content []byte, req proto.Message) error
 }

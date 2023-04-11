@@ -1,6 +1,7 @@
 package tubing
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/andyzhou/tubing/define"
@@ -30,8 +31,8 @@ type UriRouter struct {
 //face info
 type Server struct {
 	gin     *gin.Engine
-	rootUri string       //root websocket uri
-	router  face.IRouter //router interface
+	rootUri string //like /<url>/[:module]
+	router face.IRouter //router interface
 	started bool
 }
 
@@ -45,18 +46,37 @@ func GetServer() *Server {
 
 //construct
 func NewServer(gs ... *gin.Engine) *Server {
-	this := &Server{
-		gin: gin.Default(),
-	}
+	var (
+		g *gin.Engine
+	)
+	//check and set default gin engine
 	if gs != nil && len(gs) > 0 {
-		this.gin = gs[0]
+		g = gs[0]
+	}
+	if g == nil {
+		g = gin.Default()
+	}
+	//self init
+	this := &Server{
+		gin: g,
 	}
 	return this
 }
 
 //get coder
-func (f *Server) GetCoder() *face.Coder {
-	return f.router.GetCoder()
+func (f *Server) GetCoder() face.ICoder {
+	if f.router != nil {
+		return f.router.GetCoder()
+	}
+	return nil
+}
+
+//get pattern para
+func (f *Server) GetPatternPara(name string) string {
+	if f.router == nil {
+		return ""
+	}
+	return f.router.GetPatternPara(name)
 }
 
 //set gin
@@ -69,16 +89,29 @@ func (f *Server) SetGin(g *gin.Engine) error {
 }
 
 //set root uri, STEP-1
-func (f *Server) SetRootUri(uri string) error {
+func (f *Server) SetRootUriPattern(
+			rootUri string,
+			patternNames ...string) error {
 	//check
-	if uri == "" {
+	if rootUri == "" {
 		return errors.New("invalid parameter")
 	}
-	f.rootUri = uri
+	//set root uri pattern
+	if patternNames != nil {
+		bf := bytes.NewBuffer(nil)
+		bf.WriteString(rootUri)
+		for _, patternName := range patternNames {
+			tmp := fmt.Sprintf("/{:%s}", patternName)
+			bf.WriteString(tmp)
+		}
+		f.rootUri = bf.String()
+	}else{
+		f.rootUri = rootUri
+	}
 	return nil
 }
 
-//register websocket uri, STEP-2
+//register websocket uri
 //methods include `GET` or `POST`
 func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	//check
@@ -96,14 +129,13 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	}
 
 	//setup method
-	method := define.ReqMethodOfGet
+	method := ""
 	if methods != nil && len(methods) > 0 {
 		method = methods[0]
 	}
 
 	//init new router
 	router := face.NewRouter()
-
 	//setup relate key data and callbacks
 	router.SetSessionName(ur.SessionName)
 	router.SetCBForConnected(ur.CBForConnected)
@@ -114,8 +146,10 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	switch method {
 	case define.ReqMethodOfPost:
 		f.gin.POST(f.rootUri, router.Entry)
-	default:
+	case define.ReqMethodOfGet:
 		f.gin.GET(f.rootUri, router.Entry)
+	default:
+		f.gin.Any(f.rootUri, router.Entry)
 	}
 
 	//sync inter router
