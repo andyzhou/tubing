@@ -23,7 +23,7 @@ var (
 //info for router cb
 type UriRouter struct {
 	SessionName string
-	CBForConnected func(session string, para map[string]interface{}) error
+	CBForConnected func(session string, ctx *gin.Context) error
 	CBForClosed func(session string) error
 	CBForRead func(session string, messageType int, message []byte) error
 }

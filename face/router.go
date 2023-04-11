@@ -35,7 +35,7 @@ type Router struct {
 	connManager IConnManager
 	sessionName string
 	cd ICoder
-	cbForConnected func(session string, para map[string]interface{}) error
+	cbForConnected func(session string, ctx *gin.Context) error
 	cbForClosed func(session string) error
 	cbForRead func(session string, messageType int, message []byte) error
 }
@@ -50,7 +50,7 @@ func NewRouter() *Router {
 }
 
 //set cb func for connected
-func (f *Router) SetCBForConnected(cb func(session string, para map[string]interface{}) error) {
+func (f *Router) SetCBForConnected(cb func(session string, ctx *gin.Context) error) {
 	if cb == nil {
 		return
 	}
@@ -151,7 +151,7 @@ func (f *Router) Entry(c *gin.Context) {
 		for k, v := range paraValMap {
 			paraMap[k] = v
 		}
-		err = f.cbForConnected(session, paraMap)
+		err = f.cbForConnected(session, c)
 		if err != nil {
 			log.Printf("Router:Entry, cbForConnected err:%v\n", err.Error())
 			//call cb connected failed, force close connect

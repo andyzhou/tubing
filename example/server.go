@@ -35,8 +35,13 @@ func signalProcess() {
 }
 
 //cb for ws first connect
-func cbForConnected(session string, para map[string]interface{}) error {
-	log.Printf("cbForConnected, session:%v, para:%v\n", session, para)
+func cbForConnected(session string, ctx *gin.Context) error {
+	log.Printf("cbForConnected, session:%v\n", session)
+
+	//get para
+	paras := ctx.Params
+	log.Printf("cbForConnected, paras:%v\n", paras)
+
 	//cast history to new conn, todo..
 	conn, err := tb.GetConn(session)
 	if err != nil || conn == nil {
@@ -120,10 +125,15 @@ func startApp(c *cli.Context) error {
 		CBForRead: cbForRead,
 	}
 
+	//set pattern names
+	patternNames := []string{
+		"module",
+	}
+
 	//init service
 	tb = tubing.GetServer()
 	tb.SetGin(gin)
-	tb.SetRootUriPattern("/ws")
+	tb.SetRootUriPattern("/ws", patternNames...)
 	err := tb.RegisterUri(ur)
 	if err != nil {
 		return err
