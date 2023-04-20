@@ -12,6 +12,7 @@ import (
 
 //interface of router
 type IRouter interface {
+	Close()
 	Entry(c *gin.Context)
 	GetUriPara(name string) string
 	GetManager() IConnManager
@@ -31,6 +32,7 @@ type IConnManager interface {
 	Accept(connId int64, conn *websocket.Conn) (IWSConn, error)
 	GenConnId() int64
 	GetMaxConnId() int64
+	GetConnCount() int64
 	CloseWithMessage(conn *websocket.Conn, message string) error
 	CloseConn(connIds ... int64) error
 }
@@ -38,6 +40,7 @@ type IConnManager interface {
 //interface of connect
 type IWSConn interface {
 	//adv
+	ConnIsActive() bool
 	GetTags() []string
 	MarkTag(tags ...string) error
 	//base

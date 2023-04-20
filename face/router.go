@@ -39,6 +39,7 @@ type Router struct {
 	c *gin.Context
 	connManager IConnManager
 	cd ICoder
+	//cb func
 	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
 	cbForClosed func(routerName string, connId int64, ctx *gin.Context) error
 	cbForRead func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
@@ -46,6 +47,7 @@ type Router struct {
 
 //construct
 func NewRouter(name, uri string) *Router {
+	//self init
 	defaultMsgType := define.MessageTypeOfOctet
 	this := &Router{
 		name: name,
@@ -56,6 +58,11 @@ func NewRouter(name, uri string) *Router {
 	}
 	this.connManager.SetMessageType(defaultMsgType)
 	return this
+}
+
+//close
+func (f *Router) Close() {
+	f.connManager.Close()
 }
 
 //set heart beat data

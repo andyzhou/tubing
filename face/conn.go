@@ -2,6 +2,7 @@ package face
 
 import (
 	"errors"
+	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
 	"sync"
 	"sync/atomic"
@@ -27,6 +28,16 @@ func NewWSConn(conn *websocket.Conn) *WSConn {
 		tags: []string{},
 	}
 	return this
+}
+
+//check conn is active
+func (f *WSConn) ConnIsActive() bool {
+	now := time.Now().Unix()
+	diff := now - f.activeTime
+	if diff >= define.ServerHeartBeatRate {
+		return false
+	}
+	return true
 }
 
 //heart beat

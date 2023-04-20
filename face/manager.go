@@ -2,10 +2,13 @@ package face
 
 import (
 	"errors"
+	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
+	"log"
 	"reflect"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 /*
@@ -17,13 +20,18 @@ type Manager struct {
 	msgType int //reference from router
 	connId int64
 	connMap sync.Map //connId -> IWSConn
+	connCount int64
+	closeChan chan struct{}
 }
 
 //construct
 func NewManager() *Manager {
 	this := &Manager{
 		connMap: sync.Map{},
+		closeChan: make(chan struct{}, 1),
 	}
+	//spawn main process
+	go this.runMainProcess()
 	return this
 }
 
@@ -48,6 +56,11 @@ func (f *Manager) GetMaxConnId() int64 {
 //gen new conn id
 func (f *Manager) GenConnId() int64 {
 	return atomic.AddInt64(&f.connId, 1)
+}
+
+//get conn count
+func (f *Manager) GetConnCount() int64 {
+	return f.connCount
 }
 
 //set message type
@@ -144,6 +157,7 @@ func (f *Manager) Accept(
 	//init new connect
 	wsConn := NewWSConn(conn)
 	f.connMap.Store(connId, wsConn)
+	atomic.AddInt64(&f.connCount, 1)
 	return wsConn, nil
 }
 
@@ -172,6 +186,7 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 			continue
 		}
 		f.connMap.Delete(connId)
+		atomic.AddInt64(&f.connCount, -1)
 		wsConn, ok := v.(*WSConn)
 		if !ok || wsConn == nil {
 			continue
@@ -182,9 +197,60 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 			continue
 		}
 	}
+	if f.connCount < 0 {
+		atomic.StoreInt64(&f.connCount, 0)
+	}
 	return nil
 }
 
 ///////////////
 //private func
 ///////////////
+
+//check un-active conn
+func (f *Manager) checkUnActiveConn() {
+	sf := func(k, v interface{}) bool {
+		conn, ok := v.(IWSConn)
+		if ok && conn != nil {
+			if !conn.ConnIsActive() {
+				//un-active connect
+				//close and delete it
+				conn.Close()
+				f.connMap.Delete(k)
+				atomic.AddInt64(&f.connCount, -1)
+			}
+		}
+		return true
+	}
+	f.connMap.Range(sf)
+	if f.connCount < 0 {
+		atomic.StoreInt64(&f.connCount, 0)
+	}
+}
+
+//run main process
+func (f *Manager) runMainProcess() {
+	var (
+		ticker = time.NewTicker(time.Second * define.ServerHeartBeatRate)
+	)
+
+	//defer
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("Manager:runMainProcess panic err:%v\n", err)
+		}
+		ticker.Stop()
+	}()
+
+	//loop
+	for {
+		select {
+		case <- ticker.C:
+			{
+				f.checkUnActiveConn()
+			}
+		case <- f.closeChan:
+			return
+		}
+	}
+}
