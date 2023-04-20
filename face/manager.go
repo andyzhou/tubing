@@ -5,6 +5,7 @@ import (
 	"github.com/gorilla/websocket"
 	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 /*
@@ -13,7 +14,9 @@ import (
 
 //manager info
 type Manager struct {
-	connMap sync.Map //session -> IWSConn
+	msgType int //reference from router
+	connId int64
+	connMap sync.Map //connId -> IWSConn
 }
 
 //construct
@@ -37,28 +40,41 @@ func (f *Manager) Close() {
 	f.connMap = sync.Map{}
 }
 
+//get cur max conn id
+func (f *Manager) GetMaxConnId() int64 {
+	return f.connId
+}
+
+//gen new conn id
+func (f *Manager) GenConnId() int64 {
+	return atomic.AddInt64(&f.connId, 1)
+}
+
+//set message type
+func (f *Manager) SetMessageType(iType int) {
+	f.msgType = iType
+}
+
 //send message
 func (f *Manager) SendMessage(
-			messageType int,
 			message []byte,
-			sessions ... string) error {
+			connIds ... int64) error {
 	//check
-	if message == nil || sessions == nil {
+	if message == nil || connIds == nil {
 		return errors.New("invalid parameter")
 	}
-	for _, session := range sessions {
-		conn, err := f.GetConn(session)
+	for _, connId := range connIds {
+		conn, err := f.GetConn(connId)
 		if err != nil || conn == nil {
 			continue
 		}
-		conn.Write(messageType, message)
+		conn.Write(f.msgType, message)
 	}
 	return nil
 }
 
 //cast message
 func (f *Manager) CastMessage(
-				messageType int,
 				message []byte,
 				tags ...string) error {
 	//check
@@ -75,11 +91,11 @@ func (f *Manager) CastMessage(
 			bRet := reflect.DeepEqual(tags, conn.GetTags())
 			if bRet {
 				//match relate tags
-				conn.Write(messageType, message)
+				conn.Write(f.msgType, message)
 			}
 		}else{
 			//all
-			conn.Write(messageType, message)
+			conn.Write(f.msgType, message)
 		}
 		return true
 	}
@@ -87,12 +103,12 @@ func (f *Manager) CastMessage(
 	return nil
 }
 
-//get conn by session
-func (f *Manager) GetConn(session string) (IWSConn, error) {
-	if session == "" {
+//get conn by id
+func (f *Manager) GetConn(connId int64) (IWSConn, error) {
+	if connId <= 0 {
 		return nil, errors.New("invalid parameter")
 	}
-	v, ok := f.connMap.Load(session)
+	v, ok := f.connMap.Load(connId)
 	if !ok || v == nil {
 		return nil, errors.New("no such connect")
 	}
@@ -103,20 +119,31 @@ func (f *Manager) GetConn(session string) (IWSConn, error) {
 	return conn, nil
 }
 
+//heart beat
+func (f *Manager) HeartBeat(connId int64) error {
+	//check
+	if connId <= 0 {
+		return errors.New("invalid parameter")
+	}
+	conn, _ := f.GetConn(connId)
+	if conn == nil {
+		return errors.New("can't get conn by id")
+	}
+	conn.HeartBeat()
+	return nil
+}
+
 //accept websocket connect
 func (f *Manager) Accept(
-				session string,
+				connId int64,
 				conn *websocket.Conn) (IWSConn, error) {
 	//check
-	if session == "" || conn == nil {
+	if connId <= 0 || conn == nil {
 		return nil, errors.New("invalid parameter")
 	}
-	//check session, todo..
-
 	//init new connect
 	wsConn := NewWSConn(conn)
-	f.connMap.Store(session, wsConn)
-
+	f.connMap.Store(connId, wsConn)
 	return wsConn, nil
 }
 
@@ -133,18 +160,18 @@ func (f *Manager) CloseWithMessage(
 }
 
 //close conn
-func (f *Manager) CloseConn(sessions ...string) error {
+func (f *Manager) CloseConn(connIds ...int64) error {
 	//check
-	if sessions == nil {
+	if connIds == nil || len(connIds) <= 0 {
 		return errors.New("invalid parameter")
 	}
-	for _, session := range sessions {
+	for _, connId := range connIds {
 		//load and update
-		v, ok := f.connMap.Load(session)
+		v, ok := f.connMap.Load(connId)
 		if !ok || v == nil {
 			continue
 		}
-		f.connMap.Delete(session)
+		f.connMap.Delete(connId)
 		wsConn, ok := v.(*WSConn)
 		if !ok || wsConn == nil {
 			continue

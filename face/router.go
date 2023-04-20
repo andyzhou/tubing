@@ -1,8 +1,8 @@
 package face
 
 import (
+	"bytes"
 	"errors"
-	"github.com/andyzhou/tubing/base"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -15,6 +15,7 @@ import (
 /*
  * websocket router
  * - one ws uri, one router
+ * - one router, one manager
  */
 
 var (
@@ -31,26 +32,53 @@ var (
 
 //router info
 type Router struct {
+	name string
+	uri string
+	msgType int
+	heartByte []byte //heart beat data
 	c *gin.Context
 	connManager IConnManager
-	sessionName string
 	cd ICoder
-	cbForConnected func(session string, ctx *gin.Context) error
-	cbForClosed func(session string) error
-	cbForRead func(session string, messageType int, message []byte) error
+	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
+	cbForClosed func(routerName string, connId int64, ctx *gin.Context) error
+	cbForRead func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
 }
 
 //construct
-func NewRouter() *Router {
+func NewRouter(name, uri string) *Router {
+	defaultMsgType := define.MessageTypeOfOctet
 	this := &Router{
+		name: name,
+		uri: uri,
+		msgType: defaultMsgType,
 		connManager: NewManager(),
 		cd:          NewCoder(),
 	}
+	this.connManager.SetMessageType(defaultMsgType)
 	return this
 }
 
+//set heart beat data
+func (f *Router) SetHeartByte(data []byte) error {
+	if data == nil {
+		return errors.New("invalid parameter")
+	}
+	f.heartByte = data
+	return nil
+}
+
+//set message type
+func (f *Router) SetMessageType(iType int) error {
+	if iType < define.MessageTypeOfJson ||
+		iType > define.MessageTypeOfOctet {
+		return errors.New("invalid type")
+	}
+	f.msgType = iType
+	return nil
+}
+
 //set cb func for connected
-func (f *Router) SetCBForConnected(cb func(session string, ctx *gin.Context) error) {
+func (f *Router) SetCBForConnected(cb func(routerName string, connId int64, ctx *gin.Context) error) {
 	if cb == nil {
 		return
 	}
@@ -58,7 +86,7 @@ func (f *Router) SetCBForConnected(cb func(session string, ctx *gin.Context) err
 }
 
 //set cb func for conn closed
-func (f *Router) SetCBForClosed(cb func(session string) error) {
+func (f *Router) SetCBForClosed(cb func(routerName string, connId int64, ctx *gin.Context) error) {
 	if cb == nil {
 		return
 	}
@@ -66,20 +94,11 @@ func (f *Router) SetCBForClosed(cb func(session string) error) {
 }
 
 //set cb func for read data
-func (f *Router) SetCBForRead(cb func(session string, messageType int, message []byte) error) {
+func (f *Router) SetCBForRead(cb func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error) {
 	if cb == nil {
 		return
 	}
 	f.cbForRead = cb
-}
-
-//set session name
-func (f *Router) SetSessionName(name string) error {
-	if name == "" {
-		return errors.New("invalid parameter")
-	}
-	f.sessionName = name
-	return nil
 }
 
 //get coder
@@ -87,13 +106,13 @@ func (f *Router) GetCoder() ICoder {
 	return f.cd
 }
 
-//get pattern para
-func (f *Router) GetPatternPara(name string) string {
+//get uri pattern para
+func (f *Router) GetUriPara(name string) string {
 	return f.c.Param(name)
 }
 
 //entry
-func (f *Router) Entry(c *gin.Context) {
+func (f *Router) Entry(ctx *gin.Context) {
 	//defer
 	defer func() {
 		if err := recover(); err != nil {
@@ -103,35 +122,34 @@ func (f *Router) Entry(c *gin.Context) {
 	}()
 
 	//set running context
-	f.c = c
+	f.c = ctx
 
 	//get key data
-	req := c.Request
-	writer := c.Writer
+	req := ctx.Request
+	writer := ctx.Writer
 
-	//get key param
-	session := c.Query(f.sessionName)
+	//gen new connect id
+	newConnId := f.connManager.GenConnId()
 
 	//get all para
-	paraValMap := c.Request.URL.Query()
-
-	//setup net base data
-	netBase := &base.NetBase{
-		//ContentType: contentType,
-		ClientIP: c.ClientIP(), //get client id
-	}
+	//paraValMap := c.Request.URL.Query()
+	////setup net base data
+	//netBase := &base.NetBase{
+	//	//ContentType: contentType,
+	//	ClientIP: c.ClientIP(), //get client id
+	//}
 
 	//upgrade http connect to ws connect
 	conn, err := upGrader.Upgrade(writer, req, nil)
 	if err != nil {
 		//500 error
 		log.Printf("Router:Entry, upgrade http to websocket failed, err:%v\n", err.Error())
-		c.AbortWithError(http.StatusInternalServerError, err)
+		ctx.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
 	//accept new connect
-	wsConn, err := f.connManager.Accept(session, conn)
+	wsConn, err := f.connManager.Accept(newConnId, conn)
 	if err != nil {
 		//accept failed
 		log.Printf("Router:Entry, accept connect failed, err:%v\n", err.Error())
@@ -140,31 +158,31 @@ func (f *Router) Entry(c *gin.Context) {
 			log.Printf("Router:Entry, err:%v\n", err.Error())
 		}
 		if f.cbForClosed != nil {
-			f.cbForClosed(session)
+			f.cbForClosed(f.name, newConnId, ctx)
 		}
 		return
 	}
 
 	//cb connect
 	if f.cbForConnected != nil {
-		paraMap := map[string]interface{}{}
-		for k, v := range paraValMap {
-			paraMap[k] = v
-		}
-		err = f.cbForConnected(session, c)
+		//paraMap := map[string]interface{}{}
+		//for k, v := range paraValMap {
+		//	paraMap[k] = v
+		//}
+		err = f.cbForConnected(f.name, newConnId, ctx)
 		if err != nil {
 			log.Printf("Router:Entry, cbForConnected err:%v\n", err.Error())
 			//call cb connected failed, force close connect
 			f.connManager.CloseWithMessage(conn, err.Error())
 			if f.cbForClosed != nil {
-				f.cbForClosed(session)
+				f.cbForClosed(f.name, newConnId, ctx)
 			}
 			return
 		}
 	}
 
 	//spawn son process for request
-	go f.processRequest(session, wsConn, netBase)
+	go f.processRequest(newConnId, wsConn, ctx)
 }
 
 //get connect manager
@@ -179,9 +197,9 @@ func (f *Router) GetManager() IConnManager {
 //process request, include read, write, etc.
 //run as son process, one conn one process
 func (f *Router) processRequest(
-			session string,
+			connId int64,
 			wsConn IWSConn,
-			nb *base.NetBase,
+			ctx *gin.Context,
 		) {
 	var (
 		messageType int
@@ -195,7 +213,7 @@ func (f *Router) processRequest(
 			log.Printf("Router:processRequest panic, err:%v, stack:%v",
 				err, string(debug.Stack()))
 		}
-		f.connManager.CloseConn(session)
+		f.connManager.CloseConn(connId)
 	}()
 
 	//loop select
@@ -210,13 +228,23 @@ func (f *Router) processRequest(
 			}
 			//connect closed
 			if f.cbForClosed != nil {
-				f.cbForClosed(session)
+				f.cbForClosed(f.name, connId, ctx)
 			}
 			return
 		}
+		//heart beat data check
+		if f.heartByte != nil && message != nil {
+			if bytes.Compare(f.heartByte, message) == 0 {
+				//it's heart beat data
+				f.connManager.HeartBeat(connId)
+				continue
+			}
+		}
+
 		//check and run cb for read message
 		if f.cbForRead != nil {
-			f.cbForRead(session, messageType, message)
+			log.Printf("msgType:%v, msg:%v\n", messageType, string(message))
+			f.cbForRead(f.name, connId, messageType, message, ctx)
 		}
 	}
 }

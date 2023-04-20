@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/andyzhou/tubing"
 	"github.com/andyzhou/tubing/define"
 	"log"
@@ -16,11 +17,26 @@ func readMessage(message *tubing.WebSocketMessage) error {
 
 //send message
 func sendMessage(c *tubing.OneWSClient) {
-	messageType := define.MessageTypeOfOctet
-	message := []byte("hello")
 	for {
-		c.SendMessage(messageType, message)
-		time.Sleep(time.Second)
+		message := []byte(fmt.Sprintf("hello %v", time.Now().Unix()))
+		c.SendMessage(message)
+		time.Sleep(time.Second * 2)
+	}
+}
+
+//send heart beat
+func sendHeartBeat(c *tubing.OneWSClient) {
+	ticker := time.NewTicker(time.Second * 5)
+	defer func() {
+		ticker.Stop()
+	}()
+	for {
+		select {
+		case <- ticker.C:
+			{
+				c.SendMessage([]byte(define.MessageBodyOfHeartBeat))
+			}
+		}
 	}
 }
 
@@ -34,9 +50,6 @@ func main() {
 		Host: "127.0.0.1",
 		Port: 8090,
 		Uri: "/ws",
-		QueryPara: map[string]interface{}{
-			"session":"1234",
-		},
 		CBForReadMessage: readMessage,
 	}
 
@@ -50,6 +63,7 @@ func main() {
 
 	//spawn send message process
 	go sendMessage(oneClient)
+	go sendHeartBeat(oneClient)
 	wg.Add(1)
 	log.Println("client run..")
 	wg.Wait()

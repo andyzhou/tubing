@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/andyzhou/tubing"
 	"github.com/andyzhou/tubing/define"
+	"github.com/andyzhou/tubing/face"
 	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli"
 	"log"
@@ -12,6 +13,11 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+)
+
+const (
+	RouterName = "test"
+	RouterUri = "/ws"
 )
 
 var (
@@ -35,45 +41,69 @@ func signalProcess() {
 }
 
 //cb for ws first connect
-func cbForConnected(session string, ctx *gin.Context) error {
-	log.Printf("cbForConnected, session:%v\n", session)
+func cbForConnected(routerName string, connId int64, ctx *gin.Context) error {
+	log.Printf("cbForConnected, connId:%v\n", connId)
 
 	//get para
 	paras := ctx.Params
 	log.Printf("cbForConnected, paras:%v\n", paras)
 
-	//cast history to new conn, todo..
-	conn, err := tb.GetConn(session)
+	//get router
+	router, err := getRouterByName(routerName)
+	if err != nil {
+		return err
+	}
+	if router == nil {
+		return errors.New("invalid router name")
+	}
+
+	//cast test welcome message
+	conn, err := router.GetManager().GetConn(connId)
 	if err != nil || conn == nil {
-		log.Printf("cbForConnected, session:%v, get conn failed, err:%v\n", session, err)
+		log.Printf("cbForConnected, connId:%v, get conn failed, err:%v\n", connId, err)
 	}
 	messageType := 1
-	message := []byte("welcome")
+	message := []byte("welcome you!")
 	err = conn.Write(messageType, message)
-	log.Printf("cbForConnected, session:%v, send result:%v\n", session, err)
+	log.Printf("cbForConnected, connId:%v, send result:%v\n", connId, err)
 	return nil
 }
 
 //cb for ws close connect
-func cbForClosed(session string) error {
-	log.Printf("cbForClosed, session:%v\n", session)
+func cbForClosed(routerName string, connId int64, ctx *gin.Context) error {
+	log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
 
 //cb for ws read message
-func cbForRead(session string, messageType int, message []byte) error {
-	log.Printf("cbForRead, session:%v, messageType:%v, message:%v\n",
-		session, messageType, string(message))
+func cbForRead(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error {
+	log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
+		connId, messageType, string(message))
 	if tb == nil {
 		return errors.New("tb not init yet")
 	}
+
+	//get router
+	router, err := getRouterByName(routerName)
+	if err != nil {
+		return err
+	}
+	if router == nil {
+		return errors.New("invalid router name")
+	}
+
 	//cast to all
-	err := tb.CastMessage(messageType, message)
+	err = router.GetManager().CastMessage(message)
 	if err != nil {
 		log.Println("cast message failed, err:", err.Error())
 		return err
 	}
 	return nil
+}
+
+//get router by name
+func getRouterByName(name string) (face.IRouter, error) {
+	return tb.GetRouter(name)
 }
 
 //show home page
@@ -119,21 +149,17 @@ func startApp(c *cli.Context) error {
 
 	//set router
 	ur := &tubing.UriRouter{
-		SessionName: define.QueryParaOfSession,
+		RouterName: RouterName,
+		RouterUri: RouterUri,
+		HeartByte: []byte(define.MessageBodyOfHeartBeat),
 		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,
 		CBForRead: cbForRead,
 	}
 
-	////set pattern names
-	//patternNames := []string{
-	//	"module",
-	//}
-
 	//init service
 	tb = tubing.GetServer()
 	tb.SetGin(gin)
-	tb.SetRootUriPattern("/ws")
 	err := tb.RegisterUri(ur)
 	if err != nil {
 		return err

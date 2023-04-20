@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,6 +29,11 @@ func NewWSConn(conn *websocket.Conn) *WSConn {
 	return this
 }
 
+//heart beat
+func (f *WSConn) HeartBeat() {
+	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
+}
+
 //get tags
 func (f *WSConn) GetTags() []string {
 	return f.tags
@@ -47,7 +53,7 @@ func (f *WSConn) MarkTag(tags ...string) error {
 func (f *WSConn) Write(messageType int, data []byte) error {
 	f.Lock()
 	defer f.Unlock()
-	f.activeTime = time.Now().Unix()
+	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
 	return f.conn.WriteMessage(messageType, data)
 }
 

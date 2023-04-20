@@ -11,7 +11,12 @@ const (
 	MessageTypeOfOctetInfo = "octet"
 )
 
+//DO NOT CHANGE THESE VALUES!!!
 const (
-	MessageTypeOfJson = iota + 1
-	MessageTypeOfOctet
+	MessageTypeOfJson = iota + 1 //TextMessage
+	MessageTypeOfOctet //BinaryMessage
+)
+
+const (
+	MessageBodyOfHeartBeat = "HeartBeat"
 )

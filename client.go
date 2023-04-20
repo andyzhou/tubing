@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 /*
@@ -43,6 +45,8 @@ type WebSocketConnPara struct {
 //client info
 type OneWSClient struct {
 	connPara WebSocketConnPara
+	msgType int
+	id int64
 	u *url.URL
 	conn *websocket.Conn
 	interrupt chan os.Signal
@@ -59,7 +63,10 @@ type OneWSClient struct {
 
 //inter websocket manager
 type WebSocketClient struct {
-	clients sync.Map //session -> OneWSClient, c2s
+	messageType int
+	clientId int64
+	clients int64
+	clientMap sync.Map //clientId -> OneWSClient, c2s
 }
 
 //get single instance
@@ -73,26 +80,75 @@ func GetWSClient() *WebSocketClient {
 //construct
 func NewWebSocketClient() *WebSocketClient {
 	this := &WebSocketClient{
+		messageType: define.MessageTypeOfOctet,
+		clientMap: sync.Map{},
 	}
 	return this
 }
 
+//set message type
+func (f *WebSocketClient) SetMessageType(iType int) {
+	if iType < define.MessageTypeOfJson || iType > define.MessageTypeOfOctet {
+		return
+	}
+	//sync type
+	f.messageType = iType
+
+	//sync running clients
+	sf := func(k, v interface{}) bool{
+		wsc, ok := v.(*OneWSClient)
+		if ok && wsc != nil {
+			wsc.SetMsgType(iType)
+		}
+		return true
+	}
+	f.clientMap.Range(sf)
+}
+
+//get clients
+func (f *WebSocketClient) GetClients() int64 {
+	return f.clients
+}
+
 //create new c2s client
 //client connect the target server
-func (f *WebSocketClient) CreateClient(connPara *WebSocketConnPara) (*OneWSClient, error) {
-	return newOneWSClient(connPara)
+func (f *WebSocketClient) CreateClient(
+				connPara *WebSocketConnPara,
+			) (*OneWSClient, error) {
+	//gen new client id
+	newClientId := atomic.AddInt64(&f.clientId, 1)
+
+	//init new websocket client
+	wsc, err := newOneWSClient(connPara, f.messageType)
+	if err != nil {
+		return nil, err
+	}
+
+	//set key data
+	wsc.id = newClientId
+
+	//sync into map
+	f.clientMap.Store(newClientId, wsc)
+	atomic.AddInt64(&f.clients, 1)
+	return wsc, nil
 }
 
 //close connect
-func (f *WebSocketClient) Close(session string) {
-	if session == "" {
-		return
+func (f *WebSocketClient) Close(connId int64) error {
+	if connId <= 0 {
+		return errors.New("invalid parameter")
 	}
-	oneWSClient := f.getOneWSClient(session)
+	oneWSClient := f.getOneWSClient(connId)
 	if oneWSClient == nil {
-		return
+		return errors.New("no client by id")
 	}
 	oneWSClient.close()
+	f.clientMap.Delete(connId)
+	atomic.AddInt64(&f.clients, -1)
+	if f.clients < 0 {
+		atomic.StoreInt64(&f.clients, 0)
+	}
+	return nil
 }
 
 //////////////////
@@ -100,8 +156,8 @@ func (f *WebSocketClient) Close(session string) {
 //////////////////
 
 //get one websocket client by session
-func (f *WebSocketClient) getOneWSClient(session string) *OneWSClient {
-	v, ok := f.clients.Load(session)
+func (f *WebSocketClient) getOneWSClient(connId int64) *OneWSClient {
+	v, ok := f.clientMap.Load(connId)
 	if !ok || v == nil {
 		return nil
 	}
@@ -116,10 +172,14 @@ func (f *WebSocketClient) getOneWSClient(session string) *OneWSClient {
 //api for oneWSClient
 /////////////////////
 
-func newOneWSClient(connPara *WebSocketConnPara) (*OneWSClient, error) {
+func newOneWSClient(
+			connPara *WebSocketConnPara,
+			msgType int,
+		) (*OneWSClient, error) {
 	//self init
 	this := &OneWSClient{
 		connPara: *connPara,
+		msgType: msgType,
 		interrupt: make(chan os.Signal, 1),
 		readChan: make(chan WebSocketMessage, define.DefaultChanSize),
 		writeChan: make(chan WebSocketMessage, define.DefaultChanSize),
@@ -132,8 +192,22 @@ func newOneWSClient(connPara *WebSocketConnPara) (*OneWSClient, error) {
 	return this, err
 }
 
+//get conn id
+func (f *OneWSClient) GetConnId() int64 {
+	return f.id
+}
+
+//set msg type
+func (f *OneWSClient) SetMsgType(iType int) {
+	if iType < define.MessageTypeOfJson ||
+		iType > define.MessageTypeOfOctet {
+		return
+	}
+	f.msgType = iType
+}
+
 //send message data
-func (f *OneWSClient) SendMessage(messageType int, message[]byte) error {
+func (f *OneWSClient) SendMessage(message[]byte) error {
 	//check
 	if message == nil {
 		return errors.New("invalid parameter")
@@ -148,7 +222,7 @@ func (f *OneWSClient) SendMessage(messageType int, message[]byte) error {
 
 	//init request
 	req := WebSocketMessage{
-		MessageType: messageType,
+		MessageType: f.msgType,
 		Message: message,
 	}
 
@@ -225,6 +299,7 @@ func (f *OneWSClient) dialServer() error {
 //son process for send and receive
 func (f *OneWSClient) runMainProcess() {
 	var (
+		heartTicker = time.NewTicker(time.Second * define.ClientHeartBeatRate)
 		readMessage, writeMessage WebSocketMessage
 		isOk                      bool
 		err                       error
@@ -235,6 +310,7 @@ func (f *OneWSClient) runMainProcess() {
 			log.Printf("WebSocketClient:runMainProcess panic, err:%v", err)
 		}
 		f.hasClosed = true
+		heartTicker.Stop()
 		close(f.writeChan)
 		close(f.closeChan)
 	}()
@@ -252,7 +328,7 @@ func (f *OneWSClient) runMainProcess() {
 		case writeMessage, isOk = <- f.writeChan:
 			if isOk {
 				//write message
-				err = f.conn.WriteMessage(writeMessage.MessageType, writeMessage.Message)
+				err = f.conn.WriteMessage(f.msgType, writeMessage.Message)
 				if err != nil {
 					if err == io.EOF {
 						return
@@ -281,8 +357,22 @@ func (f *OneWSClient) runMainProcess() {
 				case <- f.doneChan:
 				}
 			}
+		case <- heartTicker.C:
+			{
+				//heart beat
+				f.heartBeat()
+			}
 		}
 	}
+}
+
+//heart beat
+func (f *OneWSClient) heartBeat() error {
+	if f.conn == nil {
+		return errors.New("conn is nil")
+	}
+	err := f.SendMessage([]byte(define.MessageBodyOfHeartBeat))
+	return err
 }
 
 //read message from remote server

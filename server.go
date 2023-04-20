@@ -21,17 +21,22 @@ var (
 
 //info for router cb
 type UriRouter struct {
-	SessionName string
-	CBForConnected func(session string, ctx *gin.Context) error
-	CBForClosed func(session string) error
-	CBForRead func(session string, messageType int, message []byte) error
+	RouterName string
+	RouterUri string
+	HeartByte []byte
+	CBForConnected func(routerName string, connId int64, ctx *gin.Context) error
+	CBForClosed func(routerName string, connId int64, ctx *gin.Context) error
+	CBForRead func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
 }
 
 //face info
 type Server struct {
 	gin     *gin.Engine
-	rootUri string //like /<url>/[:module]
-	router face.IRouter //router interface
+	routerUris sync.Map //uri -> name
+	routers sync.Map //name -> IRouter, router interface
+
+	//rootUri string //like /<url>/[:module]
+	//router face.IRouter //router interface
 	started bool
 }
 
@@ -58,24 +63,79 @@ func NewServer(gs ... *gin.Engine) *Server {
 	//self init
 	this := &Server{
 		gin: g,
+		routerUris: sync.Map{},
+		routers: sync.Map{},
 	}
 	return this
 }
 
-//get coder
-func (f *Server) GetCoder() face.ICoder {
-	if f.router != nil {
-		return f.router.GetCoder()
+//get router uri by name
+func (f *Server) GetUri(name string) (string, error) {
+	var (
+		uri string
+	)
+	if name == "" {
+		return "", errors.New("invalid parameter")
 	}
-	return nil
+	sf := func(k, v interface{}) bool {
+		tempName, ok := v.(string)
+		if ok && tempName != "" && tempName == name {
+			name, _ = k.(string)
+			return false
+		}
+		return true
+	}
+	f.routerUris.Range(sf)
+	return uri, nil
 }
 
-//get pattern para
-func (f *Server) GetPatternPara(name string) string {
-	if f.router == nil {
-		return ""
+////set root uri, STEP-1
+//func (f *Server) SetRootUriPattern(rootUri string) error {
+//	//check
+//	if rootUri == "" {
+//		return errors.New("invalid parameter")
+//	}
+//	//set root uri pattern
+//	f.rootUri = rootUri
+//	//if patternNames != nil {
+//	//	bf := bytes.NewBuffer(nil)
+//	//	bf.WriteString(rootUri)
+//	//	for _, patternName := range patternNames {
+//	//		tmp := fmt.Sprintf("/{:%s}", patternName)
+//	//		bf.WriteString(tmp)
+//	//	}
+//	//	f.rootUri = bf.String()
+//	//}
+//	return nil
+//}
+
+//get router uri name
+func (f *Server) GetUriName(uri string) (string, error) {
+	if uri == "" {
+		return "", errors.New("invalid parameter")
 	}
-	return f.router.GetPatternPara(name)
+	v, ok := f.routerUris.Load(uri)
+	if !ok || v == nil {
+		return "", nil
+	}
+	name, ok := v.(string)
+	if !ok || name == "" {
+		return "", nil
+	}
+	return name, nil
+}
+
+//get router by name
+func (f *Server) GetRouter(name string) (face.IRouter, error) {
+	if name == "" {
+		return nil, errors.New("invalid parameter")
+	}
+	v, ok := f.routers.Load(name)
+	if !ok || v == nil {
+		return nil, errors.New("no such router name")
+	}
+	router, _ := v.(face.IRouter)
+	return router, nil
 }
 
 //set gin
@@ -87,41 +147,19 @@ func (f *Server) SetGin(g *gin.Engine) error {
 	return nil
 }
 
-//set root uri, STEP-1
-func (f *Server) SetRootUriPattern(rootUri string) error {
-	//check
-	if rootUri == "" {
-		return errors.New("invalid parameter")
-	}
-	//set root uri pattern
-	f.rootUri = rootUri
-	//if patternNames != nil {
-	//	bf := bytes.NewBuffer(nil)
-	//	bf.WriteString(rootUri)
-	//	for _, patternName := range patternNames {
-	//		tmp := fmt.Sprintf("/{:%s}", patternName)
-	//		bf.WriteString(tmp)
-	//	}
-	//	f.rootUri = bf.String()
-	//}
-	return nil
-}
-
 //register websocket uri
 //methods include `GET` or `POST`
 func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	//check
-	if ur == nil || ur.SessionName == "" {
+	if ur == nil || ur.RouterName == "" || ur.RouterUri == "" {
 		return errors.New("invalid parameter")
 	}
 	if f.gin == nil {
 		return errors.New("inter gin engine not init yet")
 	}
-	if f.rootUri == "" {
-		return errors.New("root uri not setup")
-	}
-	if f.router != nil {
-		return errors.New("router had registered")
+	name, _ := f.GetUriName(ur.RouterUri)
+	if name != "" {
+		return errors.New("router uri had exists")
 	}
 
 	//setup method
@@ -131,9 +169,11 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	}
 
 	//init new router
-	router := face.NewRouter()
+	router := face.NewRouter(ur.RouterName, ur.RouterUri)
 	//setup relate key data and callbacks
-	router.SetSessionName(ur.SessionName)
+	if ur.HeartByte != nil {
+		router.SetHeartByte(ur.HeartByte)
+	}
 	router.SetCBForConnected(ur.CBForConnected)
 	router.SetCBForClosed(ur.CBForClosed)
 	router.SetCBForRead(ur.CBForRead)
@@ -141,26 +181,33 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	//begin register
 	switch method {
 	case define.ReqMethodOfPost:
-		f.gin.POST(f.rootUri, router.Entry)
+		f.gin.POST(ur.RouterUri, router.Entry)
 	case define.ReqMethodOfGet:
-		f.gin.GET(f.rootUri, router.Entry)
+		f.gin.GET(ur.RouterUri, router.Entry)
 	default:
-		f.gin.Any(f.rootUri, router.Entry)
+		f.gin.Any(ur.RouterUri, router.Entry)
 	}
 
-	//sync inter router
-	f.router = router
+	//sync into map
+	f.routerUris.Store(ur.RouterUri, ur.RouterName)
+	f.routers.Store(ur.RouterName, router)
 	return nil
 }
 
 //close
 func (f *Server) Close() error {
-	//check
-	if f.router == nil {
-		return errors.New("router hasn't registered")
-	}
 	//try close all
-	f.router.GetManager().Close()
+	sf := func(k, v interface{}) bool {
+		router, ok := v.(face.IRouter)
+		if ok && router != nil {
+			router.GetManager().Close()
+			f.routers.Delete(k)
+		}
+		return true
+	}
+	f.routers.Range(sf)
+	f.routers = sync.Map{}
+	f.routerUris = sync.Map{}
 	return nil
 }
 
@@ -184,58 +231,58 @@ func (f *Server) StartGin(port int) error {
 	return nil
 }
 
-//get conn by session
-func (f *Server) GetConn(session string) (face.IWSConn, error) {
-	//check
-	if session == "" {
-		return nil, errors.New("invalid parameter")
-	}
-	if f.router == nil {
-		return nil, errors.New("router hasn't registered")
-	}
-	//try get websocket connect
-	conn, err := f.router.GetManager().GetConn(session)
-	return conn, err
-}
-
-//close sessions
-func (f *Server) CloseSession(sessions ...string) error {
-	//check
-	if sessions == nil || len(sessions) <= 0 {
-		return errors.New("invalid parameter")
-	}
-	if f.router == nil {
-		return errors.New("router hasn't registered")
-	}
-	//close session
-	err := f.router.GetManager().CloseConn(sessions...)
-	return err
-}
-
-//send message to sessions
-func (f *Server) SendMessage(messageType int, message []byte, sessions ... string) error {
-	//check
-	if messageType < 0 || message == nil || sessions == nil {
-		return errors.New("invalid parameter")
-	}
-	if f.router == nil {
-		return errors.New("router hasn't registered")
-	}
-	//send message
-	err := f.router.GetManager().SendMessage(messageType, message, sessions...)
-	return err
-}
-
-//cast message
-func (f *Server) CastMessage(messageType int, message []byte, tags ... string) error {
-	//check
-	if messageType < 0 || message == nil {
-		return errors.New("invalid parameter")
-	}
-	if f.router == nil {
-		return errors.New("router hasn't registered")
-	}
-	//cast message
-	err := f.router.GetManager().CastMessage(messageType, message)
-	return err
-}
+////get conn by session
+//func (f *Server) GetConn(connId int64) (face.IWSConn, error) {
+//	//check
+//	if connId <= 0 {
+//		return nil, errors.New("invalid parameter")
+//	}
+//	if f.router == nil {
+//		return nil, errors.New("router hasn't registered")
+//	}
+//	//try get websocket connect
+//	conn, err := f.router.GetManager().GetConn(connId)
+//	return conn, err
+//}
+//
+////close connect
+//func (f *Server) CloseConn(connIds ... int64) error {
+//	//check
+//	if connIds == nil || len(connIds) <= 0 {
+//		return errors.New("invalid parameter")
+//	}
+//	if f.router == nil {
+//		return errors.New("router hasn't registered")
+//	}
+//	//close session
+//	err := f.router.GetManager().CloseConn(connIds...)
+//	return err
+//}
+//
+////send message to sessions
+//func (f *Server) SendMessage(messageType int, message []byte, connIds ... int64) error {
+//	//check
+//	if messageType < 0 || message == nil || connIds == nil {
+//		return errors.New("invalid parameter")
+//	}
+//	if f.router == nil {
+//		return errors.New("router hasn't registered")
+//	}
+//	//send message
+//	err := f.router.GetManager().SendMessage(messageType, message, connIds...)
+//	return err
+//}
+//
+////cast message
+//func (f *Server) CastMessage(messageType int, message []byte, tags ... string) error {
+//	//check
+//	if messageType < 0 || message == nil {
+//		return errors.New("invalid parameter")
+//	}
+//	if f.router == nil {
+//		return errors.New("router hasn't registered")
+//	}
+//	//cast message
+//	err := f.router.GetManager().CastMessage(messageType, message)
+//	return err
+//}

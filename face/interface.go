@@ -13,20 +13,26 @@ import (
 //interface of router
 type IRouter interface {
 	Entry(c *gin.Context)
-	GetPatternPara(name string) string
+	GetUriPara(name string) string
 	GetManager() IConnManager
 	GetCoder() ICoder
+	SetHeartByte(data []byte) error
+	SetMessageType(iType int) error
 }
 
 //interface of manager
 type IConnManager interface {
 	Close()
-	SendMessage(messageType int, message []byte, sessions ... string) error
-	CastMessage(messageType int, message []byte, tags ...string) error
-	GetConn(session string) (IWSConn, error)
-	Accept(session string, conn *websocket.Conn) (IWSConn, error)
+	SendMessage(message []byte, connIds ... int64) error
+	CastMessage(message []byte, tags ...string) error
+	HeartBeat(connId int64) error
+	SetMessageType(iType int)
+	GetConn(connId int64) (IWSConn, error)
+	Accept(connId int64, conn *websocket.Conn) (IWSConn, error)
+	GenConnId() int64
+	GetMaxConnId() int64
 	CloseWithMessage(conn *websocket.Conn, message string) error
-	CloseConn(sessions ...string) error
+	CloseConn(connIds ... int64) error
 }
 
 //interface of connect
@@ -35,6 +41,7 @@ type IWSConn interface {
 	GetTags() []string
 	MarkTag(tags ...string) error
 	//base
+	HeartBeat()
 	Write(messageType int, data []byte) error
 	Read() (int, []byte, error)
 	CloseWithMessage(message string) error
