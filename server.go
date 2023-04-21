@@ -23,6 +23,7 @@ var (
 type UriRouter struct {
 	RouterName string
 	RouterUri string
+	MsgType int
 	HeartByte []byte
 	CBForConnected func(routerName string, connId int64, ctx *gin.Context) error
 	CBForClosed func(routerName string, connId int64, ctx *gin.Context) error
@@ -150,6 +151,9 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	//setup relate key data and callbacks
 	if ur.HeartByte != nil {
 		router.SetHeartByte(ur.HeartByte)
+	}
+	if ur.MsgType > 0 {
+		router.SetMessageType(ur.MsgType)
 	}
 	router.SetCBForConnected(ur.CBForConnected)
 	router.SetCBForClosed(ur.CBForClosed)
