@@ -116,6 +116,14 @@ func (f *Server) GetRouter(name string) (face.IRouter, error) {
 	return router, nil
 }
 
+//get message type
+func (f *Server) GetMsgTypeOfJson() int {
+	return define.MessageTypeOfJson
+}
+func (f *Server) GetMsgTypeOfByte() int {
+	return define.MessageTypeOfOctet
+}
+
 //set gin
 func (f *Server) SetGin(g *gin.Engine) error {
 	if g == nil {
