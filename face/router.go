@@ -32,13 +32,13 @@ var (
 
 //router info
 type Router struct {
-	name string
-	uri string
-	msgType int
-	heartByte []byte //heart beat data
-	c *gin.Context
+	name        string
+	uri         string
+	msgType     int
+	heartByte   []byte //heart beat data
+	c           *gin.Context
 	connManager IConnManager
-	cd ICoder
+	cd          ICoder
 	//cb func
 	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
 	cbForClosed func(routerName string, connId int64, ctx *gin.Context) error
