@@ -46,17 +46,18 @@ type Router struct {
 }
 
 //construct
-func NewRouter(name, uri string) *Router {
+func NewRouter(name, uri string, msgTypes ...int) *Router {
+	//default type
+	msgType := define.MessageTypeOfOctet
 	//self init
-	defaultMsgType := define.MessageTypeOfOctet
 	this := &Router{
 		name: name,
 		uri: uri,
-		msgType: defaultMsgType,
+		msgType: msgType,
 		connManager: NewManager(),
 		cd:          NewCoder(),
 	}
-	this.connManager.SetMessageType(defaultMsgType)
+	this.connManager.SetMessageType(msgType)
 	return this
 }
 
@@ -81,6 +82,7 @@ func (f *Router) SetMessageType(iType int) error {
 		return errors.New("invalid type")
 	}
 	f.msgType = iType
+	f.connManager.SetMessageType(iType)
 	return nil
 }
 
