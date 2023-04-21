@@ -155,7 +155,7 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	}
 
 	//init new router
-	router := face.NewRouter(ur.RouterName, ur.RouterUri)
+	router := face.NewRouter(ur.RouterName, ur.RouterUri, ur.MsgType)
 	//setup relate key data and callbacks
 	if ur.HeartByte != nil {
 		router.SetHeartByte(ur.HeartByte)

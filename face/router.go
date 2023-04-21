@@ -49,6 +49,10 @@ type Router struct {
 func NewRouter(name, uri string, msgTypes ...int) *Router {
 	//default type
 	msgType := define.MessageTypeOfOctet
+	if msgTypes != nil && len(msgTypes) > 0 {
+		msgType = msgTypes[0]
+	}
+
 	//self init
 	this := &Router{
 		name: name,
