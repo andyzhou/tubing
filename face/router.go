@@ -199,6 +199,11 @@ func (f *Router) GetManager() IConnManager {
 	return f.connManager
 }
 
+//get name
+func (f *Router) GetName() string {
+	return f.name
+}
+
 //////////////
 //private func
 //////////////
