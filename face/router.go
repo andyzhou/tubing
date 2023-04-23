@@ -238,6 +238,7 @@ func (f *Router) processRequest(
 	for {
 		//read original websocket data
 		messageType, message, err = wsConn.Read()
+		log.Printf("msgType:%v, message:%v\n", messageType, string(message))
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("Router:processRequest, read EOF need close.")

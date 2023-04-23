@@ -151,6 +151,7 @@ func startApp(c *cli.Context) error {
 	ur := &tubing.UriRouter{
 		RouterName: RouterName,
 		RouterUri: RouterUri,
+		MsgType: define.MessageTypeOfOctet,
 		HeartByte: []byte(define.MessageBodyOfHeartBeat),
 		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,
