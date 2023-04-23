@@ -14,7 +14,7 @@ import (
 type IRouter interface {
 	Close()
 	Entry(c *gin.Context)
-	GetUriPara(name string) string
+	GetUriPara(name string, ctx *gin.Context) string
 	GetManager() IConnManager
 	GetCoder() ICoder
 	GetName() string

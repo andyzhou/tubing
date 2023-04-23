@@ -36,7 +36,7 @@ type Router struct {
 	uri         string
 	msgType     int
 	heartByte   []byte //heart beat data
-	c           *gin.Context
+	//c           *gin.Context
 	connManager IConnManager
 	cd          ICoder
 	//cb func
@@ -120,8 +120,8 @@ func (f *Router) GetCoder() ICoder {
 }
 
 //get uri pattern para
-func (f *Router) GetUriPara(name string) string {
-	return f.c.Param(name)
+func (f *Router) GetUriPara(name string, ctx *gin.Context) string {
+	return ctx.Param(name)
 }
 
 //entry
@@ -133,9 +133,6 @@ func (f *Router) Entry(ctx *gin.Context) {
 				err, string(debug.Stack()))
 		}
 	}()
-
-	//set running context
-	f.c = ctx
 
 	//get key data
 	req := ctx.Request
