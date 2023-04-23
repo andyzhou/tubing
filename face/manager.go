@@ -72,6 +72,9 @@ func (f *Manager) SetMessageType(iType int) {
 func (f *Manager) SendMessage(
 			message []byte,
 			connIds ... int64) error {
+	var (
+		err error
+	)
 	//check
 	if message == nil || connIds == nil {
 		return errors.New("invalid parameter")
@@ -81,9 +84,9 @@ func (f *Manager) SendMessage(
 		if err != nil || conn == nil {
 			continue
 		}
-		conn.Write(f.msgType, message)
+		err = conn.Write(f.msgType, message)
 	}
-	return nil
+	return err
 }
 
 //cast message
