@@ -14,8 +14,8 @@ const (
 //default value
 const (
 	AppName = "tubing"
-	ClientHeartBeatRate = 5
-	ServerHeartBeatRate = 30
+	ClientHeartBeatRate = 15
+	ServerHeartBeatRate = 60
 )
 
 const (
