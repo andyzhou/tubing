@@ -18,6 +18,7 @@ type IRouter interface {
 	GetManager() IConnManager
 	GetCoder() ICoder
 	GetName() string
+	GetHeartByte() []byte
 	SetHeartByte(data []byte) error
 	SetMessageType(iType int) error
 }

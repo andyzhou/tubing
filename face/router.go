@@ -124,6 +124,11 @@ func (f *Router) GetUriPara(name string, ctx *gin.Context) string {
 	return ctx.Param(name)
 }
 
+//get heart beat
+func (f *Router) GetHeartByte() []byte {
+	return f.heartByte
+}
+
 //entry
 func (f *Router) Entry(ctx *gin.Context) {
 	//defer
