@@ -215,6 +215,7 @@ func (f *Manager) checkUnActiveConn() {
 			if !conn.ConnIsActive() {
 				//un-active connect
 				//close and delete it
+				log.Printf("checkUnActiveConn, conn:%v is un-active\n", k)
 				conn.Close()
 				f.connMap.Delete(k)
 				atomic.AddInt64(&f.connCount, -1)
