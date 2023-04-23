@@ -15,7 +15,7 @@ import (
 
 //web socket connect info
 type WSConn struct {
-	conn *websocket.Conn
+	conn *websocket.Conn //reference
 	tags []string
 	activeTime int64
 	sync.RWMutex
@@ -64,6 +64,9 @@ func (f *WSConn) MarkTag(tags ...string) error {
 func (f *WSConn) Write(messageType int, data []byte) error {
 	f.Lock()
 	defer f.Unlock()
+	if f.conn == nil {
+		return errors.New("invalid ws connect")
+	}
 	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
 	return f.conn.WriteMessage(messageType, data)
 }
@@ -71,6 +74,9 @@ func (f *WSConn) Write(messageType int, data []byte) error {
 //read data
 //return messageType, data, error
 func (f *WSConn) Read() (int, []byte, error) {
+	if f.conn == nil {
+		return 0, nil, errors.New("invalid ws connect")
+	}
 	return f.conn.ReadMessage()
 }
 

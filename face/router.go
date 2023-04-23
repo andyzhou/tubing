@@ -212,7 +212,7 @@ func (f *Router) GetName() string {
 //private func
 //////////////
 
-//process request, include read, write, etc.
+//process one connect request, include read, write, etc.
 //run as son process, one conn one process
 func (f *Router) processRequest(
 			connId int64,
