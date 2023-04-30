@@ -29,6 +29,7 @@ type IConnManager interface {
 	SendMessage(message []byte, connIds ... int64) error
 	CastMessage(message []byte, tags ...string) error
 	HeartBeat(connId int64) error
+	SetHeartRate(rate int) error
 	SetMessageType(iType int)
 	GetConn(connId int64) (IWSConn, error)
 	Accept(connId int64, conn *websocket.Conn) (IWSConn, error)

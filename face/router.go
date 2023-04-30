@@ -36,7 +36,7 @@ type Router struct {
 	uri         string
 	msgType     int
 	heartByte   []byte //heart beat data
-	//c           *gin.Context
+	heartRate   int //heart beat check rate, 0:no check
 	connManager IConnManager
 	cd          ICoder
 	//cb func
@@ -76,6 +76,15 @@ func (f *Router) SetHeartByte(data []byte) error {
 		return errors.New("invalid parameter")
 	}
 	f.heartByte = data
+	return nil
+}
+
+//set heart beat rate
+func (f *Router) SetHeartRate(rate int) error {
+	if rate < 0 {
+		return errors.New("invalid parameter")
+	}
+	f.heartRate = rate
 	return nil
 }
 

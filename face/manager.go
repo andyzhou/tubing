@@ -2,7 +2,6 @@ package face
 
 import (
 	"errors"
-	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
 	"log"
 	"reflect"
@@ -18,9 +17,12 @@ import (
 //manager info
 type Manager struct {
 	msgType int //reference from router
+	heartRate int //heart beat rate
 	connId int64
 	connMap sync.Map //connId -> IWSConn
 	connCount int64
+	heartCheckChan chan struct{}
+	heartChan chan int //used for update heart beat
 	closeChan chan struct{}
 }
 
@@ -28,6 +30,8 @@ type Manager struct {
 func NewManager() *Manager {
 	this := &Manager{
 		connMap: sync.Map{},
+		heartCheckChan: make(chan struct{}, 1),
+		heartChan: make(chan int, 1),
 		closeChan: make(chan struct{}, 1),
 	}
 	//spawn main process
@@ -149,6 +153,15 @@ func (f *Manager) HeartBeat(connId int64) error {
 	return nil
 }
 
+//set heart beat rate
+func (f *Manager) SetHeartRate(rate int) error {
+	if rate < 0 {
+		return errors.New("invalid parameter")
+	}
+	f.heartChan <- rate
+	return nil
+}
+
 //accept websocket connect
 func (f *Manager) Accept(
 				connId int64,
@@ -235,7 +248,8 @@ func (f *Manager) checkUnActiveConn() {
 //run main process
 func (f *Manager) runMainProcess() {
 	var (
-		ticker = time.NewTicker(time.Second * define.ServerHeartBeatRate)
+		rate int
+		isOk bool
 	)
 
 	//defer
@@ -243,15 +257,40 @@ func (f *Manager) runMainProcess() {
 		if err := recover(); err != nil {
 			log.Printf("Manager:runMainProcess panic err:%v\n", err)
 		}
-		ticker.Stop()
+		if f.heartCheckChan != nil {
+			close(f.heartCheckChan)
+		}
+		if f.heartChan != nil {
+			close(f.heartChan)
+		}
 	}()
 
 	//loop
 	for {
 		select {
-		case <- ticker.C:
+		case <- f.heartCheckChan:
 			{
+				//check un-active connect
 				f.checkUnActiveConn()
+
+				//check and send next check
+				if f.heartRate > 0 {
+					sf := func() {
+						f.heartCheckChan <- struct{}{}
+					}
+					delay := time.Second * time.Duration(f.heartRate)
+					time.AfterFunc(delay, sf)
+				}
+			}
+		case rate, isOk = <- f.heartChan:
+			if isOk {
+				if rate > 0 {
+					//sync heart rate
+					f.heartRate = rate
+
+					//resend first heart check
+					f.heartCheckChan <- struct{}{}
+				}
 			}
 		case <- f.closeChan:
 			return
