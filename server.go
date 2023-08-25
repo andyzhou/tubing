@@ -21,10 +21,12 @@ var (
 
 //info for router cb
 type UriRouter struct {
+	//base
 	RouterName string
 	RouterUri string
 	MsgType int
 	HeartByte []byte
+	//relate cb func
 	CBForConnected func(routerName string, connId int64, ctx *gin.Context) error
 	CBForClosed func(routerName string, connId int64, ctx *gin.Context) error
 	CBForRead func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
@@ -156,6 +158,7 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 
 	//init new router
 	router := face.NewRouter(ur.RouterName, ur.RouterUri, ur.MsgType)
+
 	//setup relate key data and callbacks
 	if ur.HeartByte != nil {
 		router.SetHeartByte(ur.HeartByte)
@@ -163,6 +166,8 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	if ur.MsgType > 0 {
 		router.SetMessageType(ur.MsgType)
 	}
+
+	//setup callback
 	router.SetCBForConnected(ur.CBForConnected)
 	router.SetCBForClosed(ur.CBForClosed)
 	router.SetCBForRead(ur.CBForRead)
