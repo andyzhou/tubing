@@ -140,9 +140,12 @@ func (f *Router) GetHeartByte() []byte {
 
 //entry
 func (f *Router) Entry(ctx *gin.Context) {
+	var (
+		m any = nil
+	)
 	//defer
 	defer func() {
-		if err := recover(); err != nil {
+		if err := recover(); err != m {
 			log.Printf("Router:Entry, panic err:%v, stack:%v",
 				err, string(debug.Stack()))
 		}
@@ -234,13 +237,14 @@ func (f *Router) processRequest(
 		messageType int
 		message []byte
 		err error
+		m any = nil
 	)
 
 	//defer
 	defer func() {
-		if err := recover(); err != nil {
+		if subErr := recover(); subErr != m {
 			log.Printf("Router:processRequest panic, err:%v, stack:%v",
-				err, string(debug.Stack()))
+				subErr, string(debug.Stack()))
 		}
 		f.connManager.CloseConn(connId)
 	}()

@@ -17,8 +17,10 @@ import (
 type WSConn struct {
 	conn *websocket.Conn //reference
 	tags []string
+	propMap map[string]interface{}
 	activeTime int64
-	sync.RWMutex
+	propLock sync.RWMutex
+	connLock sync.RWMutex
 }
 
 //construct
@@ -26,6 +28,7 @@ func NewWSConn(conn *websocket.Conn) *WSConn {
 	this := &WSConn{
 		conn: conn,
 		tags: []string{},
+		propMap: map[string]interface{}{},
 	}
 	return this
 }
@@ -60,10 +63,59 @@ func (f *WSConn) MarkTag(tags ...string) error {
 	return nil
 }
 
+//get all property
+func (f *WSConn) GetAllProp() map[string]interface{} {
+	f.propLock.Lock()
+	defer f.propLock.Unlock()
+	return f.propMap
+}
+
+//get property
+func (f *WSConn) GetProp(key string) (interface{}, error) {
+	//check
+	if key == "" {
+		return nil, errors.New("invalid parameter")
+	}
+	//get prop with locker
+	f.propLock.Lock()
+	defer f.propLock.Unlock()
+	v, ok := f.propMap[key]
+	if ok && v != nil{
+		return v, nil
+	}
+	return nil, errors.New("no such property")
+}
+
+//del property
+func (f *WSConn) DelProp(key string) error {
+	//check
+	if key == "" {
+		return errors.New("invalid parameter")
+	}
+	//del prop with locker
+	f.propLock.Lock()
+	defer f.propLock.Unlock()
+	delete(f.propMap, key)
+	return nil
+}
+
+//set property
+func (f *WSConn) SetProp(key string, val interface{}) error {
+	//check
+	if key == "" || val == nil || val == "" {
+		return errors.New("invalid parameter")
+	}
+	//set prop with locker
+	f.propLock.Lock()
+	defer f.propLock.Unlock()
+	f.propMap[key] = val
+	return nil
+}
+
 //write data
 func (f *WSConn) Write(messageType int, data []byte) error {
-	f.Lock()
-	defer f.Unlock()
+	f.connLock.Lock()
+	defer f.connLock.Unlock()
 	if f.conn == nil {
 		return errors.New("invalid ws connect")
 	}
@@ -82,8 +134,8 @@ func (f *WSConn) Read() (int, []byte, error) {
 
 //close conn
 func (f *WSConn) CloseWithMessage(message string) error {
-	f.Lock()
-	defer f.Unlock()
+	f.connLock.Lock()
+	defer f.connLock.Unlock()
 	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
 	err := f.conn.WriteMessage(websocket.CloseMessage, msg)
 	if err != nil {
@@ -92,5 +144,7 @@ func (f *WSConn) CloseWithMessage(message string) error {
 	return f.Close()
 }
 func (f *WSConn) Close() error {
+	f.connLock.Lock()
+	defer f.connLock.Unlock()
 	return f.conn.Close()
 }

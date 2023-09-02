@@ -84,24 +84,29 @@ function chat_message_send(messageDiv) {
 }
 
 //receive message from chat server
-function chat_server_message(dataObj) {
-    if(typeof(dataObj) == "undefined" || dataObj == null) {
+function chat_server_message(message) {
+    if(typeof(message) == "undefined" || message == null || message == "") {
         return;
     }
     //check json object
-    if(typeof(dataObj.jsonObj) == "undefined" || dataObj.jsonObj == null) {
-        return;
-    }
-    var jsonObj = dataObj.jsonObj;
-    var kind = dataObj.kind
-    var message = jsonObj.message;
-
-    if(kind == "tips") {
-        message = "提示:" + message;
+    var isJson = isJsonStr(message)
+    var finalMessage = "";
+    if(isJson) {
+        console.log("message:"+message)
+        //try parse json data
+        var dataObj = JSON.parse(message);
+        if(typeof(dataObj) != "undefined" && dataObj != null) {
+            var message = dataObj.message;
+            var sender = dataObj.sender;
+            finalMessage = sender + ':' + message;
+        }else{
+            finalMessage = message
+        }
     }else{
-        message = jsonObj.senderNick + ':' + message;
+        //not json data, just display message
+        finalMessage = message
     }
-    chat_message_append($("<div/>").text(message));
+    chat_message_append($("<div/>").text(finalMessage));
 }
 
 
@@ -123,7 +128,6 @@ function chat_server_conn (serverAddr, channel, session) {
    // var chatAddr = "ws://" + serverAddr + "/chat/" + channel;
     //var chatAddr = "ws://adam.abc.com:6600/chat/test"
     var chatAddr = "ws://" + serverAddr + "?session=" + session;
-    //alert('chatAddr:' + chatAddr);
     wsConn = new WebSocket(chatAddr);
 
     //connect close
@@ -141,9 +145,9 @@ function chat_server_conn (serverAddr, channel, session) {
     //received message
     wsConn.onmessage = function(evt) {
         //alert('data:' + evt.data);
-        var dataObj = JSON.parse(evt.data);
+       //var dataObj = JSON.parse(evt.data);
         //process message
-        chat_server_message(dataObj);
+        chat_server_message(evt.data);
     }
 
     return true;
@@ -168,6 +172,24 @@ function chat_message_append(message) {
     }
 }
 
+//json string check
+function isJsonStr(str) {
+    if (typeof str == 'string') {
+        try {
+            var obj=JSON.parse(str);
+            if(typeof obj == 'object' && obj ){
+                return true;
+            }else{
+                return false;
+            }
+
+        } catch(e) {
+            return false;
+        }
+    }else if (typeof str == 'object'  && str) {
+        return true;
+    }
+}
 
 //////////////////////////
 //send ajax request

@@ -9,4 +9,4 @@ http, web socket proxy library, base one gin.
   
 # how to use
 
-- pls see `example` sub dir.  
+- pls see `example` sub dir, this is a simple chat demo.

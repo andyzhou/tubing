@@ -250,11 +250,12 @@ func (f *Manager) runMainProcess() {
 	var (
 		rate int
 		isOk bool
+		m any = nil
 	)
 
 	//defer
 	defer func() {
-		if err := recover(); err != nil {
+		if err := recover(); err != m {
 			log.Printf("Manager:runMainProcess panic err:%v\n", err)
 		}
 		if f.heartCheckChan != nil {

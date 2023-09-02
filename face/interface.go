@@ -46,6 +46,11 @@ type IWSConn interface {
 	ConnIsActive() bool
 	GetTags() []string
 	MarkTag(tags ...string) error
+	DelProp(key string) error
+	GetAllProp() map[string]interface{}
+	GetProp(key string) (interface{}, error)
+	SetProp(key string, val interface{}) error
+
 	//base
 	HeartBeat()
 	Write(messageType int, data []byte) error

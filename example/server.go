@@ -2,8 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"github.com/andyzhou/tubing"
 	"github.com/andyzhou/tubing/define"
+	eDefine "github.com/andyzhou/tubing/example/define"
+	"github.com/andyzhou/tubing/example/json"
 	"github.com/andyzhou/tubing/face"
 	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli"
@@ -57,12 +60,12 @@ func cbForConnected(routerName string, connId int64, ctx *gin.Context) error {
 		return errors.New("invalid router name")
 	}
 
-	//cast test welcome message
+	//cast welcome message
 	conn, err := router.GetManager().GetConn(connId)
 	if err != nil || conn == nil {
 		log.Printf("cbForConnected, connId:%v, get conn failed, err:%v\n", connId, err)
 	}
-	messageType := 1
+	messageType := define.MessageTypeOfJson
 	message := []byte("welcome you!")
 	err = conn.Write(messageType, message)
 	log.Printf("cbForConnected, connId:%v, send result:%v\n", connId, err)
@@ -83,6 +86,13 @@ func cbForRead(routerName string, connId int64, messageType int, message []byte,
 		return errors.New("tb not init yet")
 	}
 
+	//decode message
+	messageObj := json.NewMessageJson()
+	err := messageObj.Decode(message, messageObj)
+	if err != nil {
+		return err
+	}
+
 	//get router
 	router, err := getRouterByName(routerName)
 	if err != nil {
@@ -92,11 +102,60 @@ func cbForRead(routerName string, connId int64, messageType int, message []byte,
 		return errors.New("invalid router name")
 	}
 
-	//cast to all
-	err = router.GetManager().CastMessage(message)
-	if err != nil {
-		log.Println("cast message failed, err:", err.Error())
-		return err
+	//do opt by message kind
+	switch messageObj.Kind {
+	case eDefine.MsgKindOfLogin:
+		{
+			//user login
+			log.Printf("user login, conn id:%v\n", connId)
+
+			//decode login obj
+			genObjMap, _ := messageObj.JsonObj.(map[string]interface{})
+			jsonObjByte, _ := messageObj.EncodeSimple(genObjMap)
+			loginObj := json.NewLoginJson()
+			loginObj.Decode(jsonObjByte, loginObj)
+
+			//set conn property
+			conn, _ := router.GetManager().GetConn(connId)
+			if conn != nil && loginObj != nil {
+				conn.SetProp(eDefine.PropNameOfUserId, loginObj.Id)
+				conn.SetProp(eDefine.PropNameOfUserNick, loginObj.Nick)
+			}
+			break
+		}
+	case eDefine.MsgKindOfChat:
+		{
+			//chat message
+			log.Printf("user chat, conn id:%v\n", connId)
+
+			//decode message obj
+			genObjMap, _ := messageObj.JsonObj.(map[string]interface{})
+			jsonObjByte, _ := messageObj.EncodeSimple(genObjMap)
+			chatObj := json.NewChatJson()
+			chatObj.Decode(jsonObjByte, chatObj)
+
+			//get conn property
+			conn, _ := router.GetManager().GetConn(connId)
+			if conn != nil && chatObj != nil {
+				userNick, _ := conn.GetProp(eDefine.PropNameOfUserNick)
+				if userNick != nil {
+					userNickStr, _ := userNick.(string)
+					chatObj.Sender = userNickStr
+				}
+				//cast to all
+				newChatBytes, _ := chatObj.Encode(chatObj)
+				err = router.GetManager().CastMessage(newChatBytes)
+				if err != nil {
+					log.Println("cast chat message failed, err:", err.Error())
+					return err
+				}
+			}
+			break
+		}
+	default:
+		{
+			return fmt.Errorf("invalid message kind %v", messageObj.Kind)
+		}
 	}
 	return nil
 }
@@ -151,7 +210,7 @@ func startApp(c *cli.Context) error {
 	ur := &tubing.UriRouter{
 		RouterName: RouterName,
 		RouterUri: RouterUri,
-		MsgType: define.MessageTypeOfOctet,
+		MsgType: define.MessageTypeOfJson,
 		HeartByte: []byte(define.MessageBodyOfHeartBeat),
 		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,

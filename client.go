@@ -208,6 +208,9 @@ func (f *OneWSClient) SetMsgType(iType int) {
 
 //send message data
 func (f *OneWSClient) SendMessage(message[]byte) error {
+	var (
+		m any = nil
+	)
 	//check
 	if message == nil {
 		return errors.New("invalid parameter")
@@ -215,7 +218,7 @@ func (f *OneWSClient) SendMessage(message[]byte) error {
 
 	//defer
 	defer func() {
-		if err := recover(); err != nil {
+		if err := recover(); err != m {
 			log.Printf("WebSocketClient:SendData panic, err:%v", err)
 		}
 	}()
@@ -239,11 +242,14 @@ func (f *OneWSClient) SendMessage(message[]byte) error {
 
 //close
 func (f *OneWSClient) close() {
+	var (
+		m any = nil
+	)
 	if f.conn == nil {
 		return
 	}
 	defer func() {
-		if err := recover(); err != nil {
+		if err := recover(); err != m {
 			log.Printf("WebSocketClient:Close panic, err:%v", err)
 		}
 	}()
@@ -254,9 +260,12 @@ func (f *OneWSClient) close() {
 
 //dial server
 func (f *OneWSClient) dialServer() error {
+	var (
+		m any = nil
+	)
 	//defer
 	defer func() {
-		if err := recover(); err != nil {
+		if err := recover(); err != m {
 			log.Println("OneWSClient:dialServer panic, err:", err)
 			//init interrupt
 			signal.Notify(f.interrupt, os.Interrupt)
@@ -303,11 +312,12 @@ func (f *OneWSClient) runMainProcess() {
 		readMessage, writeMessage WebSocketMessage
 		isOk                      bool
 		err                       error
+		m any = nil
 	)
 	//defer
 	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("WebSocketClient:runMainProcess panic, err:%v", err)
+		if subErr := recover(); subErr != m {
+			log.Printf("WebSocketClient:runMainProcess panic, err:%v", subErr)
 		}
 		f.hasClosed = true
 		heartTicker.Stop()
@@ -381,12 +391,13 @@ func (f *OneWSClient) readMessageFromServer(done chan struct{}) {
 		messageType int
 		message []byte
 		err error
+		m any = nil
 	)
 
 	//defer
 	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("WebSocketClient:readMessageFromServer panic, err:%v", err)
+		if subErr := recover(); subErr != m {
+			log.Printf("WebSocketClient:readMessageFromServer panic, err:%v", subErr)
 		}
 		close(f.readChan)
 		close(done)
