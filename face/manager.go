@@ -23,6 +23,7 @@ type Manager struct {
 	heartCheckChan chan struct{}
 	heartChan chan int //used for update heart beat
 	closeChan chan struct{}
+	activeSwitcher bool //used for check conn active or not
 }
 
 //construct
@@ -49,6 +50,15 @@ func (f *Manager) Close() {
 	}
 	f.connMap.Range(sf)
 	f.connMap = sync.Map{}
+}
+
+//set active check switch
+func (f *Manager) SetActiveSwitch(switcher bool) {
+	f.activeSwitcher = switcher
+	if switcher {
+		//start checker
+		f.heartCheckChan <- struct{}{}
+	}
 }
 
 //get cur max conn id
@@ -227,7 +237,7 @@ func (f *Manager) checkUnActiveConn() {
 	sf := func(k, v interface{}) bool {
 		conn, ok := v.(IWSConn)
 		if ok && conn != nil {
-			if !conn.ConnIsActive() {
+			if f.activeSwitcher && !conn.ConnIsActive(f.heartRate) {
 				//un-active connect
 				//close and delete it
 				log.Printf("tubing.manager:checkUnActiveConn, conn:%v is un-active\n", k)
@@ -270,11 +280,11 @@ func (f *Manager) runMainProcess() {
 		select {
 		case <- f.heartCheckChan:
 			{
-				//check un-active connect
-				go f.checkUnActiveConn()
-
 				//check and send next check
-				if f.heartRate > 0 {
+				if f.heartRate > 0 && f.activeSwitcher {
+					//check un-active connect
+					go f.checkUnActiveConn()
+
 					sf := func() {
 						f.heartCheckChan <- struct{}{}
 					}
@@ -287,8 +297,10 @@ func (f *Manager) runMainProcess() {
 				//sync heart rate
 				f.heartRate = rate
 
-				//resend first heart check
-				f.heartCheckChan <- struct{}{}
+				if f.activeSwitcher {
+					//resend first heart check
+					f.heartCheckChan <- struct{}{}
+				}
 			}
 		case <- f.closeChan:
 			return

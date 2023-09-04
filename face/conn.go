@@ -35,10 +35,19 @@ func NewWSConn(conn *websocket.Conn) *WSConn {
 }
 
 //check conn is active
-func (f *WSConn) ConnIsActive() bool {
+func (f *WSConn) ConnIsActive(checkRates ...int) bool {
+	var (
+		checkRate int
+	)
+	if checkRates != nil && len(checkRates) > 0 {
+		checkRate = checkRates[0]
+	}
+	if checkRate <= 0 {
+		checkRate = define.ServerHeartBeatRate
+	}
 	now := time.Now().Unix()
 	diff := now - f.activeTime
-	if diff >= define.ServerHeartBeatRate {
+	if diff >= int64(checkRate) {
 		return false
 	}
 	return true

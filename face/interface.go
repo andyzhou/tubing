@@ -38,12 +38,13 @@ type IConnManager interface {
 	GetConnCount() int64
 	CloseWithMessage(conn *websocket.Conn, message string) error
 	CloseConn(connIds ... int64) error
+	SetActiveSwitch(bool)
 }
 
 //interface of connect
 type IWSConn interface {
 	//adv
-	ConnIsActive() bool
+	ConnIsActive(checkRates ...int) bool
 	VerifyTag(tags ...string) bool
 	GetTags() []string
 	MarkTag(tags ...string) error
