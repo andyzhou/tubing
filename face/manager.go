@@ -84,8 +84,8 @@ func (f *Manager) SendMessage(
 		return errors.New("invalid parameter")
 	}
 	for _, connId := range connIds {
-		conn, err := f.GetConn(connId)
-		if err != nil || conn == nil {
+		conn, subErr := f.GetConn(connId)
+		if subErr != nil || conn == nil {
 			continue
 		}
 		err = conn.Write(f.msgType, message)
@@ -231,7 +231,7 @@ func (f *Manager) checkUnActiveConn() {
 			if !conn.ConnIsActive() {
 				//un-active connect
 				//close and delete it
-				log.Printf("checkUnActiveConn, conn:%v is un-active\n", k)
+				log.Printf("tubing.manager:checkUnActiveConn, conn:%v is un-active\n", k)
 				conn.Close()
 				f.connMap.Delete(k)
 				atomic.AddInt64(&f.connCount, -1)
@@ -256,7 +256,7 @@ func (f *Manager) runMainProcess() {
 	//defer
 	defer func() {
 		if err := recover(); err != m {
-			log.Printf("Manager:runMainProcess panic err:%v\n", err)
+			log.Printf("tubing.manager:runMainProcess panic err:%v\n", err)
 		}
 		if f.heartCheckChan != nil {
 			close(f.heartCheckChan)
@@ -272,7 +272,7 @@ func (f *Manager) runMainProcess() {
 		case <- f.heartCheckChan:
 			{
 				//check un-active connect
-				f.checkUnActiveConn()
+				go f.checkUnActiveConn()
 
 				//check and send next check
 				if f.heartRate > 0 {
@@ -284,14 +284,12 @@ func (f *Manager) runMainProcess() {
 				}
 			}
 		case rate, isOk = <- f.heartChan:
-			if isOk {
-				if rate > 0 {
-					//sync heart rate
-					f.heartRate = rate
+			if isOk && rate > 0 {
+				//sync heart rate
+				f.heartRate = rate
 
-					//resend first heart check
-					f.heartCheckChan <- struct{}{}
-				}
+				//resend first heart check
+				f.heartCheckChan <- struct{}{}
 			}
 		case <- f.closeChan:
 			return
