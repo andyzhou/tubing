@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,6 +49,17 @@ func (f *WSConn) HeartBeat() {
 	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
 }
 
+//verify tags
+func (f *WSConn) VerifyTag(tags ...string) bool {
+	//check
+	if tags == nil || len(tags) <= 0 {
+		return false
+	}
+	//loop verify
+	bRet := reflect.DeepEqual(tags, f.tags)
+	return bRet
+}
+
 //get tags
 func (f *WSConn) GetTags() []string {
 	return f.tags
@@ -61,6 +73,23 @@ func (f *WSConn) MarkTag(tags ...string) error {
 	f.tags = []string{}
 	f.tags = append(f.tags, tags...)
 	return nil
+}
+
+//verify properties
+//if exists return true, or face
+func (f *WSConn) VerifyProp(keys ...string) bool {
+	//check
+	if keys == nil || len(keys) <= 0 {
+		return false
+	}
+	//loop verify
+	for _, key := range keys {
+		_, ok := f.propMap[key]
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 //get all property

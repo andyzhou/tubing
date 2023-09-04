@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	"log"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -108,7 +107,7 @@ func (f *Manager) CastMessage(
 		}
 		if tags != nil {
 			//filter by tags
-			bRet := reflect.DeepEqual(tags, conn.GetTags())
+			bRet := conn.VerifyTag(tags...)
 			if bRet {
 				//match relate tags
 				conn.Write(f.msgType, message)
