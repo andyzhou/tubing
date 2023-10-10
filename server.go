@@ -7,6 +7,7 @@ import (
 	"github.com/andyzhou/tubing/face"
 	"github.com/gin-gonic/gin"
 	"sync"
+	"sync/atomic"
 )
 
 /*
@@ -38,6 +39,7 @@ type Server struct {
 	gin     *gin.Engine
 	routerUris sync.Map //uri -> name
 	routers sync.Map //name -> IRouter, router interface
+	routerCount int32
 	started bool
 }
 
@@ -68,6 +70,77 @@ func NewServer(gs ... *gin.Engine) *Server {
 		routers: sync.Map{},
 	}
 	return this
+}
+
+//quit
+func (f *Server) Quit() {
+	if f.routerCount <= 0 {
+		return
+	}
+	//stop all routers
+	sf := func(k, v interface{}) bool {
+		router, ok := v.(face.IRouter)
+		if ok && router != nil {
+			router.Close()
+		}
+		f.routers.Delete(k)
+		atomic.AddInt32(&f.routerCount, -1)
+		return true
+	}
+	f.routers.Range(sf)
+	if f.routerCount <= 0 {
+		atomic.StoreInt32(&f.routerCount, 0)
+	}
+	f.routers = sync.Map{}
+	f.routerUris = sync.Map{}
+}
+
+//remove one url by name
+func (f *Server) RemoveUriByName(name string) error {
+	//check
+	if name == "" {
+		return errors.New("invalid parameter")
+	}
+	//get router by name
+	router, err := f.GetRouter(name)
+	if err != nil {
+		return err
+	}
+	if router == nil {
+		return errors.New("no such router by name")
+	}
+	//get uri by name
+	uri, _ := f.GetUri(name)
+
+	//close
+	router.Close()
+	f.routers.Delete(name)
+	if uri != "" {
+		f.routerUris.Delete(uri)
+	}
+	atomic.AddInt32(&f.routerCount, -1)
+
+	//check and reset memory
+	if f.routerCount <= 0 {
+		atomic.StoreInt32(&f.routerCount, 0)
+		f.routers = sync.Map{}
+		f.routerUris = sync.Map{}
+	}
+	return nil
+}
+
+//get running router names
+func (f *Server) GetNames() []string {
+	result := make([]string, 0)
+	sf := func(k, v interface{}) bool {
+		name, ok := v.(string)
+		if ok && name != "" {
+			result = append(result, name)
+		}
+		return true
+	}
+	f.routerUris.Range(sf)
+	return result
 }
 
 //get router uri by name
@@ -195,6 +268,7 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	//sync into map
 	f.routerUris.Store(ur.RouterUri, ur.RouterName)
 	f.routers.Store(ur.RouterName, router)
+	atomic.AddInt32(&f.routerCount, 1)
 	return nil
 }
 
