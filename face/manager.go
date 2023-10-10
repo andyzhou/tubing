@@ -17,7 +17,7 @@ import (
 type Manager struct {
 	msgType int //reference from router
 	heartRate int //heart beat rate
-	connId int64
+	connId int64 //connect id automatic
 	connMap sync.Map //connId -> IWSConn
 	connCount int64
 	heartCheckChan chan struct{}
@@ -50,6 +50,9 @@ func (f *Manager) Close() {
 	}
 	f.connMap.Range(sf)
 	f.connMap = sync.Map{}
+	if f.closeChan != nil {
+		f.closeChan <- struct{}{}
+	}
 }
 
 //set active check switch
@@ -89,7 +92,7 @@ func (f *Manager) SendMessage(
 		err error
 	)
 	//check
-	if message == nil || connIds == nil {
+	if message == nil || connIds == nil || len(connIds) <= 0 {
 		return errors.New("invalid parameter")
 	}
 	for _, connId := range connIds {
@@ -166,6 +169,9 @@ func (f *Manager) HeartBeat(connId int64) error {
 func (f *Manager) SetHeartRate(rate int) error {
 	if rate < 0 {
 		return errors.New("invalid parameter")
+	}
+	if f.heartChan == nil {
+		return errors.New("heart chan is nil")
 	}
 	f.heartChan <- rate
 	return nil

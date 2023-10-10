@@ -18,27 +18,25 @@ import (
  * - one router, one manager
  */
 
-var (
-	//up grader for http -> websocket
-	upGrader = websocket.Upgrader{
-		ReadBufferSize:    define.DefaultBuffSize,
-		WriteBufferSize:   define.DefaultBuffSize,
-		EnableCompression: true,
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
+type (
+	//router inter config
+	RouterCfg struct {
+		Name 		string
+		Uri 		string
+		MsgType 	int
+		BufferSize 	int
+		HeartByte 	[]byte
+		HeartRate	int //heart beat check rate, 0:no check
 	}
 )
 
 //router info
 type Router struct {
-	name        string
-	uri         string
-	msgType     int
-	heartByte   []byte //heart beat data
-	heartRate   int //heart beat check rate, 0:no check
+	rc *RouterCfg //reference cfg
 	connManager IConnManager
 	cd          ICoder
+	upGrader websocket.Upgrader //ws up grader
+
 	//cb func
 	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
 	cbForClosed func(routerName string, connId int64, ctx *gin.Context) error
@@ -46,22 +44,38 @@ type Router struct {
 }
 
 //construct
-func NewRouter(name, uri string, msgTypes ...int) *Router {
+func NewRouter(rc *RouterCfg) *Router {
 	//default type
-	msgType := define.MessageTypeOfOctet
-	if msgTypes != nil && len(msgTypes) > 0 {
-		msgType = msgTypes[0]
+	if rc.MsgType < define.MessageTypeOfJson {
+		rc.MsgType = define.MessageTypeOfOctet
+	}
+	if rc.BufferSize <= 0 {
+		rc.BufferSize = define.DefaultBuffSize
+	}
+
+	//setup upgrade
+	//up grader for http -> websocket
+	upGrader := websocket.Upgrader{
+		ReadBufferSize:    define.DefaultBuffSize,
+		WriteBufferSize:   define.DefaultBuffSize,
+		EnableCompression: true,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+	if rc.BufferSize > 0 {
+		upGrader.ReadBufferSize = rc.BufferSize
+		upGrader.WriteBufferSize = rc.BufferSize
 	}
 
 	//self init
 	this := &Router{
-		name: name,
-		uri: uri,
-		msgType: msgType,
+		rc: rc,
+		upGrader: upGrader,
 		connManager: NewManager(),
 		cd:          NewCoder(),
 	}
-	this.connManager.SetMessageType(msgType)
+	this.connManager.SetMessageType(rc.MsgType)
 	return this
 }
 
@@ -75,7 +89,7 @@ func (f *Router) SetHeartByte(data []byte) error {
 	if data == nil {
 		return errors.New("invalid parameter")
 	}
-	f.heartByte = data
+	f.rc.HeartByte = data
 	return nil
 }
 
@@ -84,7 +98,7 @@ func (f *Router) SetHeartRate(rate int) error {
 	if rate < 0 {
 		return errors.New("invalid parameter")
 	}
-	f.heartRate = rate
+	f.rc.HeartRate = rate
 	return nil
 }
 
@@ -94,7 +108,7 @@ func (f *Router) SetMessageType(iType int) error {
 		iType > define.MessageTypeOfOctet {
 		return errors.New("invalid type")
 	}
-	f.msgType = iType
+	f.rc.MsgType = iType
 	f.connManager.SetMessageType(iType)
 	return nil
 }
@@ -135,7 +149,7 @@ func (f *Router) GetUriPara(name string, ctx *gin.Context) string {
 
 //get heart beat
 func (f *Router) GetHeartByte() []byte {
-	return f.heartByte
+	return f.rc.HeartByte
 }
 
 //entry
@@ -158,16 +172,8 @@ func (f *Router) Entry(ctx *gin.Context) {
 	//gen new connect id
 	newConnId := f.connManager.GenConnId()
 
-	//get all para
-	//paraValMap := c.Request.URL.Query()
-	////setup net base data
-	//netBase := &base.NetBase{
-	//	//ContentType: contentType,
-	//	ClientIP: c.ClientIP(), //get client id
-	//}
-
 	//upgrade http connect to ws connect
-	conn, err := upGrader.Upgrade(writer, req, nil)
+	conn, err := f.upGrader.Upgrade(writer, req, nil)
 	if err != nil {
 		//500 error
 		log.Printf("Router:Entry, upgrade http to websocket failed, err:%v\n", err.Error())
@@ -185,7 +191,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 			log.Printf("Router:Entry, err:%v\n", err.Error())
 		}
 		if f.cbForClosed != nil {
-			f.cbForClosed(f.name, newConnId, ctx)
+			f.cbForClosed(f.rc.Name, newConnId, ctx)
 		}
 		return
 	}
@@ -196,13 +202,13 @@ func (f *Router) Entry(ctx *gin.Context) {
 		//for k, v := range paraValMap {
 		//	paraMap[k] = v
 		//}
-		err = f.cbForConnected(f.name, newConnId, ctx)
+		err = f.cbForConnected(f.rc.Name, newConnId, ctx)
 		if err != nil {
 			log.Printf("Router:Entry, cbForConnected err:%v\n", err.Error())
 			//call cb connected failed, force close connect
 			f.connManager.CloseWithMessage(conn, err.Error())
 			if f.cbForClosed != nil {
-				f.cbForClosed(f.name, newConnId, ctx)
+				f.cbForClosed(f.rc.Name, newConnId, ctx)
 			}
 			return
 		}
@@ -219,7 +225,7 @@ func (f *Router) GetManager() IConnManager {
 
 //get name
 func (f *Router) GetName() string {
-	return f.name
+	return f.rc.Name
 }
 
 //////////////
@@ -261,13 +267,13 @@ func (f *Router) processRequest(
 			}
 			//connect closed
 			if f.cbForClosed != nil {
-				f.cbForClosed(f.name, connId, ctx)
+				f.cbForClosed(f.rc.Name, connId, ctx)
 			}
 			return
 		}
 		//heart beat data check
-		if f.heartByte != nil && message != nil {
-			if bytes.Compare(f.heartByte, message) == 0 {
+		if f.rc.HeartByte != nil && message != nil {
+			if bytes.Compare(f.rc.HeartByte, message) == 0 {
 				//it's heart beat data
 				f.connManager.HeartBeat(connId)
 				continue
@@ -276,8 +282,7 @@ func (f *Router) processRequest(
 
 		//check and run cb for read message
 		if f.cbForRead != nil {
-			log.Printf("msgType:%v, msg:%v\n", messageType, string(message))
-			f.cbForRead(f.name, connId, messageType, message, ctx)
+			f.cbForRead(f.rc.Name, connId, messageType, message, ctx)
 		}
 	}
 }
