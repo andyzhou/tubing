@@ -23,7 +23,7 @@ func sendMessage(c *tubing.OneWSClient) {
 		if err != nil {
 			log.Printf("sendMessage, err:%v\n", err.Error())
 		}
-		time.Sleep(time.Second * 2)
+		time.Sleep(time.Second/10)
 	}
 }
 
@@ -69,10 +69,10 @@ func main() {
 	go sendHeartBeat(oneClient)
 
 	//auto close after 20 seconds
-	sf := func() {
-		c.Close()
-	}
-	time.AfterFunc(time.Second * 20, sf)
+	//sf := func() {
+	//	c.Close()
+	//}
+	//time.AfterFunc(time.Second * 20, sf)
 
 	wg.Add(1)
 	log.Println("client run..")

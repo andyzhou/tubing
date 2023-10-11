@@ -54,11 +54,14 @@ type OneWSClient struct {
 	u *url.URL
 	conn *websocket.Conn
 	interrupt chan os.Signal
+	heartBeatChan chan struct{}
+	heartBeatRate int
 	writeChan chan WebSocketMessage
 	doneChan chan struct{}
 	closeChan chan bool
 	isConnecting bool
 	forceClosed bool
+	autoConn bool //auto connect server switch
 
 	//cb func
 	cbForReadMessage func(message *WebSocketMessage) error
@@ -70,6 +73,8 @@ type OneWSClient struct {
 //inter websocket manager
 type WebSocketClient struct {
 	messageType int
+	heartBeatRate int
+	autoConnect bool
 	clientId int64
 	clients int64
 	clientMap sync.Map //clientId -> OneWSClient, c2s
@@ -109,6 +114,24 @@ func (f *WebSocketClient) SetMessageType(iType int) {
 		return true
 	}
 	f.clientMap.Range(sf)
+}
+
+//set auto connect switch
+func (f *WebSocketClient) SetAutoConnSwitch(switcher bool) {
+	f.autoConnect = switcher
+	//notify all sub ws client
+	f.notifyAutoConnect()
+}
+
+//set heart beat rate
+func (f *WebSocketClient) SetHeartBeatRate(rate int) error {
+	if rate < 0 {
+		return errors.New("invalid rate parameter")
+	}
+	f.heartBeatRate = rate
+	//notify all sub ws client
+	f.notifyHeartBeatRate()
+	return nil
 }
 
 //get clients
@@ -181,6 +204,36 @@ func (f *WebSocketClient) CloseConn(connId int64) error {
 //private func
 //////////////////
 
+//notify auto connect to all sub ws client
+func (f *WebSocketClient) notifyAutoConnect() {
+	if f.clients <= 0 {
+		return
+	}
+	sf := func(k, v interface{}) bool {
+		swc, ok := v.(*OneWSClient)
+		if ok && swc != nil {
+			swc.SetAutoConnect(f.autoConnect)
+		}
+		return true
+	}
+	f.clientMap.Range(sf)
+}
+
+//notify heart beat rate to all sub ws client
+func (f *WebSocketClient) notifyHeartBeatRate() {
+	if f.clients <= 0 {
+		return
+	}
+	sf := func(k, v interface{}) bool {
+		swc, ok := v.(*OneWSClient)
+		if ok && swc != nil {
+			swc.SetHeartBeatRate(f.heartBeatRate)
+		}
+		return true
+	}
+	f.clientMap.Range(sf)
+}
+
 //get one websocket client by session
 func (f *WebSocketClient) getOneWSClient(connId int64) *OneWSClient {
 	v, ok := f.clientMap.Load(connId)
@@ -206,8 +259,9 @@ func newOneWSClient(
 	this := &OneWSClient{
 		connPara: *connPara,
 		msgType: msgType,
+		autoConn: true, //auto connect default
 		interrupt: make(chan os.Signal, 1),
-		//readChan: make(chan WebSocketMessage, define.DefaultChanSize),
+		heartBeatChan: make(chan struct{}, 1),
 		writeChan: make(chan WebSocketMessage, define.DefaultChanSize),
 		doneChan: make(chan struct{}, 1),
 		closeChan: make(chan bool, 1),
@@ -238,6 +292,29 @@ func (f *OneWSClient) SetMsgType(iType int) {
 		return
 	}
 	f.msgType = iType
+}
+
+//set auto connect switcher
+func (f *OneWSClient) SetAutoConnect(switcher bool) {
+	f.autoConn = switcher
+	if switcher && !f.forceClosed && f.conn == nil {
+		//force dail server
+		f.dialServer()
+	}
+}
+
+//set heart beat rate
+func (f *OneWSClient) SetHeartBeatRate(rate int) error {
+	//check
+	if rate < 0 {
+		return errors.New("invalid rate parameter")
+	}
+	//setup and notify
+	f.heartBeatRate = rate
+	if rate > 0 {
+		f.heartBeatChan <- struct{}{}
+	}
+	return nil
 }
 
 //send message data
@@ -320,6 +397,13 @@ func (f *OneWSClient) close() {
 
 //auto connect
 func (f *OneWSClient) autoConnect() {
+	//check
+	if !f.autoConn {
+		//not allow auto connect server
+		return
+	}
+
+	//delay connect server
 	sf := func() {
 		f.dialServer()
 	}
@@ -401,7 +485,7 @@ func (f *OneWSClient) heartBeat() error {
 //son process for send and receive
 func (f *OneWSClient) runMainProcess() {
 	var (
-		heartTicker = time.NewTicker(time.Second * define.ClientHeartBeatRate)
+		//heartTicker = time.NewTicker(time.Second * define.ClientHeartBeatRate)
 		writeMessage WebSocketMessage
 		isOk                      bool
 		err                       error
@@ -416,13 +500,26 @@ func (f *OneWSClient) runMainProcess() {
 		//stop and close
 		f.Lock()
 		defer f.Unlock()
-		heartTicker.Stop()
+		//heartTicker.Stop()
 		if f.conn != nil {
 			f.conn.Close()
 			f.conn = nil
 		}
 		f.isConnecting = false
 	}()
+
+	//setup ticker func
+	heatBeatTicker := func() {
+		sf := func() {
+			if f.heartBeatRate > 0 && f.heartBeatChan != nil {
+				f.heartBeatChan <- struct{}{}
+			}
+		}
+		if f.heartBeatRate > 0 {
+			duration := time.Duration(f.heartBeatRate) * time.Second
+			time.AfterFunc(duration, sf)
+		}
+	}
 
 	//main loop
 	//log.Printf("WebSocketClient:runMainProcess start\n")
@@ -462,10 +559,13 @@ func (f *OneWSClient) runMainProcess() {
 					return
 				}
 			}
-		case <- heartTicker.C:
+		case <- f.heartBeatChan:
 			{
 				//heart beat
 				f.heartBeat()
+
+				//send next ticker
+				heatBeatTicker()
 			}
 		}
 	}
