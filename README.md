@@ -1,6 +1,7 @@
 # tubing
-http, web socket proxy library, base one gin.
+tubing is a http web socket proxy library, base one gin.
 
+# code introduce
 - server.go
   - used for server side
 
