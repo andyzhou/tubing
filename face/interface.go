@@ -45,9 +45,6 @@ type IConnManager interface {
 type IWSConn interface {
 	//adv
 	ConnIsActive(checkRates ...int) bool
-	VerifyTag(tags ...string) bool
-	GetTags() []string
-	MarkTag(tags ...string) error
 	VerifyProp(keys ...string) bool
 	DelProp(key string) error
 	GetAllProp() map[string]interface{}

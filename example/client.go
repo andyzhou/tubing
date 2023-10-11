@@ -19,8 +19,11 @@ func readMessage(message *tubing.WebSocketMessage) error {
 func sendMessage(c *tubing.OneWSClient) {
 	for {
 		message := []byte(fmt.Sprintf("hello %v", time.Now().Unix()))
-		c.SendMessage(message)
-		time.Sleep(time.Second / 10)
+		err := c.SendMessage(message)
+		if err != nil {
+			log.Printf("sendMessage, err:%v\n", err.Error())
+		}
+		time.Sleep(time.Second * 2)
 	}
 }
 
@@ -64,6 +67,13 @@ func main() {
 	//spawn send message process
 	go sendMessage(oneClient)
 	go sendHeartBeat(oneClient)
+
+	//auto close
+	sf := func() {
+		c.Close()
+	}
+	time.AfterFunc(time.Second * 5, sf)
+
 	wg.Add(1)
 	log.Println("client run..")
 	wg.Wait()

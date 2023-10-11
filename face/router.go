@@ -152,7 +152,7 @@ func (f *Router) GetHeartByte() []byte {
 	return f.rc.HeartByte
 }
 
-//entry
+//new connect entry
 func (f *Router) Entry(ctx *gin.Context) {
 	var (
 		m any = nil
@@ -171,6 +171,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 
 	//gen new connect id
 	newConnId := f.connManager.GenConnId()
+	log.Printf("Router:Entry, new connect id:%v\n", newConnId)
 
 	//upgrade http connect to ws connect
 	conn, err := f.upGrader.Upgrade(writer, req, nil)
@@ -188,7 +189,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 		log.Printf("Router:Entry, accept connect failed, err:%v\n", err.Error())
 		err = f.connManager.CloseWithMessage(conn, define.MessageForNormalClosed)
 		if err != nil {
-			log.Printf("Router:Entry, err:%v\n", err.Error())
+			log.Printf("Router:Entry, manager closed failed, err:%v\n", err.Error())
 		}
 		if f.cbForClosed != nil {
 			f.cbForClosed(f.rc.Name, newConnId, ctx)
@@ -257,7 +258,13 @@ func (f *Router) processRequest(
 
 	//loop select
 	for {
-		//read original websocket data
+		//check
+		if &wsConn == nil {
+			log.Printf("Router:processRequest, ws connect is nil\n")
+			return
+		}
+
+		//read original websocket data from client side
 		messageType, message, err = wsConn.Read()
 		if err != nil {
 			if err == io.EOF {
@@ -271,6 +278,7 @@ func (f *Router) processRequest(
 			}
 			return
 		}
+
 		//heart beat data check
 		if f.rc.HeartByte != nil && message != nil {
 			if bytes.Compare(f.rc.HeartByte, message) == 0 {

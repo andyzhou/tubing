@@ -19,6 +19,7 @@ type Manager struct {
 	heartRate int //heart beat rate
 	connId int64 //connect id automatic
 	connMap sync.Map //connId -> IWSConn
+	connTags sync.Map //tag -> map[int64]bool, int64 map
 	connCount int64
 	heartCheckChan chan struct{}
 	heartChan chan int //used for update heart beat
@@ -30,6 +31,7 @@ type Manager struct {
 func NewManager() *Manager {
 	this := &Manager{
 		connMap: sync.Map{},
+		connTags: sync.Map{},
 		heartCheckChan: make(chan struct{}, 1),
 		heartChan: make(chan int, 1),
 		closeChan: make(chan struct{}, 1),
@@ -53,6 +55,37 @@ func (f *Manager) Close() {
 	if f.closeChan != nil {
 		f.closeChan <- struct{}{}
 	}
+}
+
+//mark conn tag
+func (f *Manager) MarkTag(connId int64, tags ...string) error {
+	//check
+	if connId <= 0 || tags == nil || len(tags) <= 0 {
+		return errors.New("invalid parameter")
+	}
+	conn, err := f.GetConn(connId)
+	if err != nil {
+		return err
+	}
+	if conn == nil {
+		return errors.New("no such connect id")
+	}
+
+	//mark conn tag
+	for _, tag := range tags {
+		if tag == "" {
+			continue
+		}
+		v, ok := f.connTags.Load(tag)
+		if !ok || v == nil {
+			v = map[int64]bool{}
+		}
+		if subMap, subOk := v.(map[int64]bool); subOk {
+			subMap[connId] = true
+		}
+		f.connTags.Store(tag, v)
+	}
+	return nil
 }
 
 //set active check switch
@@ -110,25 +143,33 @@ func (f *Manager) CastMessage(
 				message []byte,
 				tags ...string) error {
 	//check
-	if message == nil {
+	if message == nil || len(message) <= 0 {
 		return errors.New("invalid parameter")
 	}
+
+	//filter by tags first
+	if tags != nil && len(tags) > 0 {
+		connIds, _ := f.getConnIdsByTag(tags...)
+		if connIds != nil {
+			for _, connId := range connIds {
+				//get conn by id and write message
+				conn, _ := f.GetConn(connId)
+				if conn != nil {
+					conn.Write(f.msgType, message)
+				}
+			}
+		}
+		return nil
+	}
+
+	//cast message to all
 	sf := func(k, v interface{}) bool {
 		conn, ok := v.(IWSConn)
 		if !ok || conn == nil {
 			return true
 		}
-		if tags != nil {
-			//filter by tags
-			bRet := conn.VerifyTag(tags...)
-			if bRet {
-				//match relate tags
-				conn.Write(f.msgType, message)
-			}
-		}else{
-			//all
-			conn.Write(f.msgType, message)
-		}
+		//write message
+		conn.Write(f.msgType, message)
 		return true
 	}
 	f.connMap.Range(sf)
@@ -231,12 +272,34 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 	if f.connCount < 0 {
 		atomic.StoreInt64(&f.connCount, 0)
 	}
+	log.Printf("manager.CloseConn, connect count:%v\n", f.connCount)
 	return nil
 }
 
 ///////////////
 //private func
 ///////////////
+
+//get conn ids by tag
+func (f *Manager) getConnIdsByTag(tags ...string) ([]int64, error) {
+	//check
+	if tags == nil || len(tags) <= 0 {
+		return nil, errors.New("invalid parameter")
+	}
+	//format result
+	result := make([]int64, 0)
+	for _, tag := range tags {
+		v, ok := f.connTags.Load(tag)
+		if ok && v != nil {
+			if tempMap, subOk := v.(map[int64]bool); subOk && tempMap != nil {
+				for connId, _ := range tempMap {
+					result = append(result, connId)
+				}
+			}
+		}
+	}
+	return result, nil
+}
 
 //check un-active conn
 func (f *Manager) checkUnActiveConn() {

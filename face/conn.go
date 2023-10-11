@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,12 +11,12 @@ import (
 
 /*
  * websocket connect
+ * reflect.DeepEqual(x, y)
  */
 
 //web socket connect info
 type WSConn struct {
 	conn *websocket.Conn //reference
-	tags []string
 	propMap map[string]interface{}
 	activeTime int64
 	propLock sync.RWMutex
@@ -28,7 +27,6 @@ type WSConn struct {
 func NewWSConn(conn *websocket.Conn) *WSConn {
 	this := &WSConn{
 		conn: conn,
-		tags: []string{},
 		propMap: map[string]interface{}{},
 	}
 	return this
@@ -56,32 +54,6 @@ func (f *WSConn) ConnIsActive(checkRates ...int) bool {
 //heart beat
 func (f *WSConn) HeartBeat() {
 	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
-}
-
-//verify tags
-func (f *WSConn) VerifyTag(tags ...string) bool {
-	//check
-	if tags == nil || len(tags) <= 0 {
-		return false
-	}
-	//loop verify
-	bRet := reflect.DeepEqual(tags, f.tags)
-	return bRet
-}
-
-//get tags
-func (f *WSConn) GetTags() []string {
-	return f.tags
-}
-
-//mark tag
-func (f *WSConn) MarkTag(tags ...string) error {
-	if tags == nil || len(tags) <= 0 {
-		return errors.New("invalid parameter")
-	}
-	f.tags = []string{}
-	f.tags = append(f.tags, tags...)
-	return nil
 }
 
 //verify properties
