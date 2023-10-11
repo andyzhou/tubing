@@ -23,7 +23,7 @@ type Manager struct {
 	connTags sync.Map //tag -> map[int64]bool, int64 map
 	connCount int64
 	heartCheckChan chan struct{}
-	heartChan chan int //used for update heart beat
+	heartChan chan int //used for update heart beat rate
 	closeChan chan struct{}
 	activeSwitcher bool //used for check conn active or not
 }
@@ -355,18 +355,24 @@ func (f *Manager) runMainProcess() {
 					//check un-active connect
 					go f.checkUnActiveConn()
 
+					//send next heart beta check ticker
 					sf := func() {
-						f.heartCheckChan <- struct{}{}
+						if f.heartCheckChan != nil {
+							f.heartCheckChan <- struct{}{}
+						}
 					}
 					delay := time.Second * time.Duration(f.heartRate)
 					time.AfterFunc(delay, sf)
 				}
 			}
 		case rate, isOk = <- f.heartChan:
-			if isOk && rate > 0 {
+			if isOk && rate >= 0 {
 				//sync heart rate
 				f.heartRate = rate
-
+				if rate == 0 {
+					//stop heart check
+					f.activeSwitcher = false
+				}
 				if f.activeSwitcher {
 					//resend first heart check
 					f.heartCheckChan <- struct{}{}

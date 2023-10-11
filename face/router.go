@@ -76,7 +76,12 @@ func NewRouter(rc *RouterCfg) *Router {
 		connManager: NewManager(),
 		cd:          NewCoder(),
 	}
+
+	//setup manager
 	this.connManager.SetMessageType(rc.MsgType)
+	if rc.HeartRate > 0 {
+		this.connManager.SetHeartRate(rc.HeartRate)
+	}
 	return this
 }
 
@@ -281,7 +286,7 @@ func (f *Router) processRequest(
 		}
 
 		//heart beat data check
-		if f.rc.HeartByte != nil && message != nil {
+		if f.rc.HeartRate > 0 && f.rc.HeartByte != nil && message != nil {
 			if bytes.Compare(f.rc.HeartByte, message) == 0 {
 				//it's heart beat data
 				f.connManager.HeartBeat(connId)
