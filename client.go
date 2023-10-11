@@ -424,7 +424,7 @@ func (f *OneWSClient) runMainProcess() {
 	}()
 
 	//main loop
-	log.Printf("WebSocketClient:runMainProcess start\n")
+	//log.Printf("WebSocketClient:runMainProcess start\n")
 	for {
 		select {
 		case writeMessage, isOk = <- f.writeChan:
@@ -487,7 +487,7 @@ func (f *OneWSClient) readMessageFromServer() {
 	}()
 
 	//loop receive message
-	log.Printf("WebSocketClient:readMessageFromServer start\n")
+	//log.Printf("WebSocketClient:readMessageFromServer start\n")
 	for {
 		//check
 		if f.conn == nil {

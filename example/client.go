@@ -68,11 +68,11 @@ func main() {
 	go sendMessage(oneClient)
 	go sendHeartBeat(oneClient)
 
-	//auto close
+	//auto close after 20 seconds
 	sf := func() {
 		c.Close()
 	}
-	time.AfterFunc(time.Second * 5, sf)
+	time.AfterFunc(time.Second * 20, sf)
 
 	wg.Add(1)
 	log.Println("client run..")
