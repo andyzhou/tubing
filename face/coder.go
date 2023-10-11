@@ -8,6 +8,7 @@ import (
 )
 
 /*
+ * @author Andy Chow <diudiu8848@163.com>
  * message en/decoder
  */
 

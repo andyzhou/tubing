@@ -7,6 +7,7 @@ import (
 )
 
 /*
+ * @author Andy Chow <diudiu8848@163.com>
  * websocket relate interface define
  */
 

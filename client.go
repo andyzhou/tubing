@@ -19,6 +19,7 @@ import (
 )
 
 /*
+ * @author Andy Chow <diudiu8848@163.com>
  * websocket client
  * - persistent connect
  */

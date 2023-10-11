@@ -13,6 +13,7 @@ import (
 )
 
 /*
+ * @author Andy Chow <diudiu8848@163.com>
  * websocket router
  * - one ws uri, one router
  * - one router, one manager
