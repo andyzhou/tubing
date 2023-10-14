@@ -23,7 +23,8 @@ type Manager struct {
 	buckets int
 	bucketMap sync.Map //bucketId -> *Bucket
 	connMap sync.Map //connId -> IWSConn
-	connTags sync.Map //tag -> map[int64]bool,  connId -> bool
+	connTagMap sync.Map //tag -> map[int64]bool => connId -> bool
+	connRemoteMap map[string]int64 //remoteAddr -> connId
 	connCount int64
 	heartCheckChan chan struct{}
 	heartChan chan int //used for update heart beat rate
@@ -38,7 +39,8 @@ func NewManager(buckets int) *Manager {
 		buckets: buckets,
 		bucketMap: sync.Map{},
 		connMap: sync.Map{},
-		connTags: sync.Map{},
+		connTagMap: sync.Map{},
+		connRemoteMap: map[string]int64{},
 		heartCheckChan: make(chan struct{}, 1),
 		heartChan: make(chan int, 1),
 		closeChan: make(chan struct{}, 1),
@@ -73,8 +75,17 @@ func (f *Manager) RemoveTag(connId int64, tags ...string) error {
 	if connId <= 0 || tags == nil || len(tags) <= 0 {
 		return errors.New("invalid parameter")
 	}
+	conn, err := f.GetConn(connId)
+	if err != nil {
+		return err
+	}
+	if conn == nil {
+		return errors.New("no such connect id")
+	}
+
+	//remove tags
 	for _, tag := range tags {
-		tagVal, _ := f.connTags.Load(tag)
+		tagVal, _ := f.connTagMap.Load(tag)
 		tempMap, _ := tagVal.(map[int64]bool)
 		if tempMap != nil {
 			f.mapLock.Lock()
@@ -82,6 +93,7 @@ func (f *Manager) RemoveTag(connId int64, tags ...string) error {
 			f.mapLock.Unlock()
 		}
 	}
+	conn.RemoveTags(tags...)
 	return nil
 }
 
@@ -100,18 +112,21 @@ func (f *Manager) MarkTag(connId int64, tags ...string) error {
 	}
 
 	//mark conn tag
+	conn.MarkTags(tags...)
+
+	//setup tag
 	for _, tag := range tags {
 		if tag == "" {
 			continue
 		}
-		v, ok := f.connTags.Load(tag)
+		v, ok := f.connTagMap.Load(tag)
 		if !ok || v == nil {
 			v = map[int64]bool{}
 		}
 		if subMap, subOk := v.(map[int64]bool); subOk {
 			subMap[connId] = true
 		}
-		f.connTags.Store(tag, v)
+		f.connTagMap.Store(tag, v)
 	}
 	return nil
 }
@@ -254,9 +269,13 @@ func (f *Manager) Accept(
 	if connId <= 0 || conn == nil {
 		return nil, errors.New("invalid parameter")
 	}
+	connRemoteAddr := conn.RemoteAddr().String()
+
 	//init new connect
-	wsConn := NewWSConn(conn)
+	wsConn := NewWSConn(conn, connId)
+	wsConn.SetRemoteAddr(connRemoteAddr)
 	f.connMap.Store(connId, wsConn)
+	f.connRemoteMap[connRemoteAddr] = connId
 	atomic.AddInt64(&f.connCount, 1)
 	return wsConn, nil
 }
@@ -269,6 +288,17 @@ func (f *Manager) CloseWithMessage(
 	err := conn.WriteMessage(websocket.CloseMessage, msg)
 	if err != nil {
 		return err
+	}
+	//get relate data by remote addr
+	remoteAddr := conn.RemoteAddr().String()
+	f.mapLock.Lock()
+	connId, _ := f.connRemoteMap[remoteAddr]
+	f.mapLock.Unlock()
+	if connId > 0 {
+		f.CloseConn(connId)
+		f.mapLock.Lock()
+		delete(f.connRemoteMap, remoteAddr)
+		f.mapLock.Unlock()
 	}
 	return conn.Close()
 }
@@ -285,6 +315,32 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 		if !ok || v == nil {
 			continue
 		}
+		conn, _ := v.(IWSConn)
+		if conn == nil {
+			continue
+		}
+		remoteAddr := conn.GetRemoteAddr()
+		if remoteAddr != "" {
+			f.mapLock.Lock()
+			delete(f.connRemoteMap, remoteAddr)
+			f.mapLock.Unlock()
+		}
+
+		//get conn tags
+		tags := conn.GetTags()
+		if tags != nil {
+			for tag, _ := range tags {
+				connMap, _ := f.connTagMap.Load(tag)
+				if connMap != nil {
+					connMapVal, _ := connMap.(map[int64]bool)
+					if connMapVal != nil {
+						delete(connMapVal, connId)
+					}
+				}
+			}
+		}
+
+		//remove relate data
 		f.connMap.Delete(connId)
 		atomic.AddInt64(&f.connCount, -1)
 		wsConn, ok := v.(*WSConn)
@@ -317,7 +373,7 @@ func (f *Manager) getConnIdsByTag(tags ...string) ([]int64, error) {
 	//format result
 	result := make([]int64, 0)
 	for _, tag := range tags {
-		v, ok := f.connTags.Load(tag)
+		v, ok := f.connTagMap.Load(tag)
 		if ok && v != nil {
 			if tempMap, subOk := v.(map[int64]bool); subOk && tempMap != nil {
 				for connId, _ := range tempMap {
@@ -338,7 +394,7 @@ func (f *Manager) checkUnActiveConn() {
 				//un-active connect
 				//close and delete it
 				log.Printf("tubing.manager:checkUnActiveConn, conn:%v is un-active\n", k)
-				conn.Close()
+				f.CloseConn(conn.GetConnId())
 				f.connMap.Delete(k)
 				atomic.AddInt64(&f.connCount, -1)
 			}

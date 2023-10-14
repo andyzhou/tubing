@@ -17,20 +17,71 @@ import (
 
 //web socket connect info
 type WSConn struct {
+	connId int64 //connect id
 	conn *websocket.Conn //reference
 	propMap map[string]interface{}
+	tagMap map[string]bool
+	remoteAddr string
 	activeTime int64
 	propLock sync.RWMutex
 	connLock sync.RWMutex
 }
 
 //construct
-func NewWSConn(conn *websocket.Conn) *WSConn {
+func NewWSConn(conn *websocket.Conn, connId int64) *WSConn {
 	this := &WSConn{
+		connId: connId,
 		conn: conn,
 		propMap: map[string]interface{}{},
+		tagMap: map[string]bool{},
 	}
 	return this
+}
+
+//get connect id
+func (f *WSConn) GetConnId() int64 {
+	return f.connId
+}
+
+//get remote addr
+func (f *WSConn) GetRemoteAddr() string {
+	return f.remoteAddr
+}
+
+//set remote addr
+func (f *WSConn) SetRemoteAddr(addr string) error {
+	if addr == "" {
+		return errors.New("invalid parameter")
+	}
+	f.remoteAddr = addr
+	return nil
+}
+
+//get tags
+func (f *WSConn) GetTags() map[string]bool {
+	return f.tagMap
+}
+
+//remove tags
+func (f *WSConn) RemoveTags(tags ...string) error {
+	if tags == nil || len(tags) <= 0 {
+		return errors.New("invalid parameter")
+	}
+	for _, tag := range tags {
+		delete(f.tagMap, tag)
+	}
+	return nil
+}
+
+//mark tags
+func (f *WSConn) MarkTags(tags ...string) error {
+	if tags == nil || len(tags) <= 0 {
+		return errors.New("invalid parameter")
+	}
+	for _, tag := range tags {
+		f.tagMap[tag] = true
+	}
+	return nil
 }
 
 //check conn is active

@@ -45,6 +45,11 @@ type IConnManager interface {
 //interface of connect
 type IWSConn interface {
 	//adv
+	GetConnId() int64
+	GetRemoteAddr() string
+	GetTags() map[string]bool
+	RemoveTags(tags ...string) error
+	MarkTags(tags ...string) error
 	ConnIsActive(checkRates ...int) bool
 	VerifyProp(keys ...string) bool
 	DelProp(key string) error
