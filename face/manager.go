@@ -24,7 +24,7 @@ type Manager struct {
 	bucketMap sync.Map //bucketId -> *Bucket
 	connMap sync.Map //connId -> IWSConn
 	connTagMap sync.Map //tag -> map[int64]bool => connId -> bool
-	connRemoteMap map[string]int64 //remoteAddr -> connId
+	connRemoteMap sync.Map //remoteAddr -> connId
 	connCount int64
 	heartCheckChan chan struct{}
 	heartChan chan int //used for update heart beat rate
@@ -40,7 +40,7 @@ func NewManager(buckets int) *Manager {
 		bucketMap: sync.Map{},
 		connMap: sync.Map{},
 		connTagMap: sync.Map{},
-		connRemoteMap: map[string]int64{},
+		connRemoteMap: sync.Map{},
 		heartCheckChan: make(chan struct{}, 1),
 		heartChan: make(chan int, 1),
 		closeChan: make(chan struct{}, 1),
@@ -275,7 +275,7 @@ func (f *Manager) Accept(
 	wsConn := NewWSConn(conn, connId)
 	wsConn.SetRemoteAddr(connRemoteAddr)
 	f.connMap.Store(connId, wsConn)
-	f.connRemoteMap[connRemoteAddr] = connId
+	f.connRemoteMap.Store(connRemoteAddr, connId)
 	atomic.AddInt64(&f.connCount, 1)
 	return wsConn, nil
 }
@@ -292,13 +292,10 @@ func (f *Manager) CloseWithMessage(
 	//get relate data by remote addr
 	remoteAddr := conn.RemoteAddr().String()
 	f.mapLock.Lock()
-	connId, _ := f.connRemoteMap[remoteAddr]
-	f.mapLock.Unlock()
-	if connId > 0 {
-		f.CloseConn(connId)
-		f.mapLock.Lock()
-		delete(f.connRemoteMap, remoteAddr)
-		f.mapLock.Unlock()
+	connId, _ := f.connRemoteMap.Load(remoteAddr)
+	connIdVal, _ := connId.(int64)
+	if connIdVal > 0 {
+		f.CloseConn(connIdVal)
 	}
 	return conn.Close()
 }
@@ -321,9 +318,7 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 		}
 		remoteAddr := conn.GetRemoteAddr()
 		if remoteAddr != "" {
-			f.mapLock.Lock()
-			delete(f.connRemoteMap, remoteAddr)
-			f.mapLock.Unlock()
+			f.connRemoteMap.Delete(remoteAddr)
 		}
 
 		//get conn tags
