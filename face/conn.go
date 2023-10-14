@@ -42,7 +42,7 @@ func (f *WSConn) ConnIsActive(checkRates ...int) bool {
 		checkRate = checkRates[0]
 	}
 	if checkRate <= 0 {
-		checkRate = define.ServerHeartBeatRate
+		checkRate = define.DefaultHeartBeatRate
 	}
 	now := time.Now().Unix()
 	diff := now - f.activeTime

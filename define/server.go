@@ -15,7 +15,8 @@ const (
 const (
 	AppName = "tubing"
 	ClientHeartBeatRate = 10 //xx seconds
-	ServerHeartBeatRate = 60 //xx seconds
+	DefaultHeartBeatRate = 60 //xx seconds
+	DefaultBuckets = 5 //xx buckets
 )
 
 //const (

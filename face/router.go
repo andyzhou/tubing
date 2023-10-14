@@ -26,6 +26,7 @@ type (
 		Uri 		string
 		MsgType 	int
 		BufferSize 	int
+		Buckets 	int
 		HeartByte 	[]byte
 		HeartRate	int //heart beat check rate, 0:no check
 	}
@@ -53,6 +54,9 @@ func NewRouter(rc *RouterCfg) *Router {
 	if rc.BufferSize <= 0 {
 		rc.BufferSize = define.DefaultBuffSize
 	}
+	if rc.Buckets <= 0 {
+		rc.Buckets = define.DefaultBuckets
+	}
 
 	//setup upgrade
 	//up grader for http -> websocket
@@ -73,7 +77,7 @@ func NewRouter(rc *RouterCfg) *Router {
 	this := &Router{
 		rc: rc,
 		upGrader: upGrader,
-		connManager: NewManager(),
+		connManager: NewManager(rc.Buckets),
 		cd:          NewCoder(),
 	}
 

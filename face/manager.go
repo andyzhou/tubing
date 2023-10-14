@@ -12,6 +12,7 @@ import (
 /*
  * @author Andy Chow <diudiu8848@163.com>
  * websocket manager
+ * bucket hashed by ws conn id
  */
 
 //manager info
@@ -19,24 +20,32 @@ type Manager struct {
 	msgType int //reference from router
 	heartRate int //heart beat rate
 	connId int64 //connect id automatic
+	buckets int
+	bucketMap sync.Map //bucketId -> *Bucket
 	connMap sync.Map //connId -> IWSConn
-	connTags sync.Map //tag -> map[int64]bool, int64 map
+	connTags sync.Map //tag -> map[int64]bool,  connId -> bool
 	connCount int64
 	heartCheckChan chan struct{}
 	heartChan chan int //used for update heart beat rate
 	closeChan chan struct{}
 	activeSwitcher bool //used for check conn active or not
+	mapLock sync.RWMutex
 }
 
 //construct
-func NewManager() *Manager {
+func NewManager(buckets int) *Manager {
 	this := &Manager{
+		buckets: buckets,
+		bucketMap: sync.Map{},
 		connMap: sync.Map{},
 		connTags: sync.Map{},
 		heartCheckChan: make(chan struct{}, 1),
 		heartChan: make(chan int, 1),
 		closeChan: make(chan struct{}, 1),
 	}
+	//inter init
+	this.interInit()
+
 	//spawn main process
 	go this.runMainProcess()
 	return this
@@ -56,6 +65,24 @@ func (f *Manager) Close() {
 	if f.closeChan != nil {
 		f.closeChan <- struct{}{}
 	}
+}
+
+//remove conn tag
+func (f *Manager) RemoveTag(connId int64, tags ...string) error {
+	//check
+	if connId <= 0 || tags == nil || len(tags) <= 0 {
+		return errors.New("invalid parameter")
+	}
+	for _, tag := range tags {
+		tagVal, _ := f.connTags.Load(tag)
+		tempMap, _ := tagVal.(map[int64]bool)
+		if tempMap != nil {
+			f.mapLock.Lock()
+			delete(tempMap, connId)
+			f.mapLock.Unlock()
+		}
+	}
+	return nil
 }
 
 //mark conn tag
@@ -381,5 +408,38 @@ func (f *Manager) runMainProcess() {
 		case <- f.closeChan:
 			return
 		}
+	}
+}
+
+//get target bucket by connect id
+func (f *Manager) getTargetBucket(connId int64) (*Bucket, error) {
+	//check
+	if connId <= 0 {
+		return nil, errors.New("invalid parameter")
+	}
+
+	//get hash idx and bucket
+	hashIdx := int(connId % int64(f.buckets))
+	v, ok := f.bucketMap.Load(hashIdx)
+	if !ok || v == nil {
+		//init new
+		v = NewBucket(hashIdx)
+		f.bucketMap.Store(hashIdx, v)
+	}
+
+	//detect value
+	b, ok := v.(*Bucket)
+	if ok && b != nil {
+		return b, nil
+	}
+	return nil, errors.New("can't get bucket")
+}
+
+//inter init
+func (f *Manager) interInit() {
+	//init inter bucket
+	for i := 0; i < f.buckets; i++ {
+		b := NewBucket(i)
+		f.bucketMap.Store(i, b)
 	}
 }
