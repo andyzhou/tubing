@@ -29,6 +29,7 @@ type UriRouter struct {
 	MsgType int
 	HeartByte []byte
 	BuffSize int //read and write buffer size
+
 	//relate cb func
 	CBForConnected func(routerName string, connId int64, ctx *gin.Context) error
 	CBForClosed func(routerName string, connId int64, ctx *gin.Context) error
@@ -37,11 +38,11 @@ type UriRouter struct {
 
 //face info
 type Server struct {
-	gin     *gin.Engine
-	routerUris sync.Map //uri -> name
-	routers sync.Map //name -> IRouter, router interface
+	gin         *gin.Engine
+	routerUris  sync.Map //uri -> name
+	routers     sync.Map //name -> IRouter, router interface
 	routerCount int32
-	started bool
+	started     bool
 }
 
 //get single instance
@@ -83,9 +84,9 @@ func (f *Server) Quit() {
 		router, ok := v.(face.IRouter)
 		if ok && router != nil {
 			router.Close()
+			f.routers.Delete(k)
+			atomic.AddInt32(&f.routerCount, -1)
 		}
-		f.routers.Delete(k)
-		atomic.AddInt32(&f.routerCount, -1)
 		return true
 	}
 	f.routers.Range(sf)
@@ -102,6 +103,7 @@ func (f *Server) RemoveUriByName(name string) error {
 	if name == "" {
 		return errors.New("invalid parameter")
 	}
+
 	//get router by name
 	router, err := f.GetRouter(name)
 	if err != nil {
@@ -110,6 +112,7 @@ func (f *Server) RemoveUriByName(name string) error {
 	if router == nil {
 		return errors.New("no such router by name")
 	}
+
 	//get uri by name
 	uri, _ := f.GetUri(name)
 
@@ -182,9 +185,15 @@ func (f *Server) GetUriName(uri string) (string, error) {
 
 //get router by name
 func (f *Server) GetRouter(name string) (face.IRouter, error) {
+	//check
 	if name == "" {
 		return nil, errors.New("invalid parameter")
 	}
+	if f.routerCount <= 0 {
+		return nil, errors.New("no any active routers")
+	}
+
+	//load by name
 	v, ok := f.routers.Load(name)
 	if !ok || v == nil {
 		return nil, errors.New("no such router name")
@@ -203,6 +212,7 @@ func (f *Server) GetMsgTypeOfByte() int {
 
 //set gin
 func (f *Server) SetGin(g *gin.Engine) error {
+	//check
 	if g == nil {
 		return errors.New("invalid gin engine object")
 	}
