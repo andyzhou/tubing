@@ -330,8 +330,8 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 		//remove relate data
 		f.connMap.Delete(connId)
 		atomic.AddInt64(&f.connCount, -1)
-		wsConn, ok := v.(*WSConn)
-		if !ok || wsConn == nil {
+		wsConn, subOk := v.(*WSConn)
+		if !subOk || wsConn == nil {
 			continue
 		}
 		//begin close and clear
@@ -340,10 +340,15 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 			continue
 		}
 	}
-	if f.connCount < 0 {
+	if f.connCount <= 0 {
+		newConnMap := sync.Map{}
+		connTagMap := sync.Map{}
+		remoteMap := sync.Map{}
+		f.connMap = newConnMap
+		f.connTagMap = connTagMap
+		f.connRemoteMap = remoteMap
 		atomic.StoreInt64(&f.connCount, 0)
 	}
-	log.Printf("manager.CloseConn, connect count:%v\n", f.connCount)
 	return nil
 }
 
