@@ -40,6 +40,7 @@ type Router struct {
 	upGrader websocket.Upgrader //ws up grader
 
 	//cb func
+	cbForGenConnId func() int64
 	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
 	cbForClosed func(routerName string, connId int64, ctx *gin.Context) error
 	cbForRead func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
@@ -47,7 +48,7 @@ type Router struct {
 
 //construct
 func NewRouter(rc *RouterCfg) *Router {
-	//default type
+	//default value setup
 	if rc.MsgType < define.MessageTypeOfJson {
 		rc.MsgType = define.MessageTypeOfOctet
 	}
@@ -68,6 +69,8 @@ func NewRouter(rc *RouterCfg) *Router {
 			return true
 		},
 	}
+
+	//setup read and write buffer size
 	if rc.BufferSize > 0 {
 		upGrader.ReadBufferSize = rc.BufferSize
 		upGrader.WriteBufferSize = rc.BufferSize
@@ -123,6 +126,14 @@ func (f *Router) SetMessageType(iType int) error {
 	return nil
 }
 
+//set cb for gen connect id
+func (f *Router) SetCBForGenConnId(cb func() int64) {
+	if cb == nil {
+		return
+	}
+	f.cbForGenConnId = cb
+}
+
 //set cb func for connected
 func (f *Router) SetCBForConnected(cb func(routerName string, connId int64, ctx *gin.Context) error) {
 	if cb == nil {
@@ -165,6 +176,7 @@ func (f *Router) GetHeartByte() []byte {
 //new connect entry
 func (f *Router) Entry(ctx *gin.Context) {
 	var (
+		newConnId int64
 		m any = nil
 	)
 	//defer
@@ -179,10 +191,6 @@ func (f *Router) Entry(ctx *gin.Context) {
 	req := ctx.Request
 	writer := ctx.Writer
 
-	//gen new connect id
-	newConnId := f.connManager.GenConnId()
-	log.Printf("Router:Entry, new connect id:%v\n", newConnId)
-
 	//upgrade http connect to ws connect
 	conn, err := f.upGrader.Upgrade(writer, req, nil)
 	if err != nil {
@@ -192,11 +200,18 @@ func (f *Router) Entry(ctx *gin.Context) {
 		return
 	}
 
+	//gen new connect id
+	if f.cbForGenConnId != nil {
+		newConnId = f.cbForGenConnId()
+	}else{
+		newConnId = f.connManager.GenConnId()
+	}
+
 	//accept new connect
-	wsConn, err := f.connManager.Accept(newConnId, conn)
-	if err != nil {
+	wsConn, subErr := f.connManager.Accept(newConnId, conn)
+	if subErr != nil {
 		//accept failed
-		log.Printf("Router:Entry, accept connect failed, err:%v\n", err.Error())
+		log.Printf("Router:Entry, accept connect failed, err:%v\n", subErr.Error())
 		err = f.connManager.CloseWithMessage(conn, define.MessageForNormalClosed)
 		if err != nil {
 			log.Printf("Router:Entry, manager closed failed, err:%v\n", err.Error())
@@ -209,10 +224,6 @@ func (f *Router) Entry(ctx *gin.Context) {
 
 	//cb connect
 	if f.cbForConnected != nil {
-		//paraMap := map[string]interface{}{}
-		//for k, v := range paraValMap {
-		//	paraMap[k] = v
-		//}
 		err = f.cbForConnected(f.rc.Name, newConnId, ctx)
 		if err != nil {
 			log.Printf("Router:Entry, cbForConnected err:%v\n", err.Error())
@@ -249,13 +260,18 @@ func (f *Router) processRequest(
 			connId int64,
 			wsConn IWSConn,
 			ctx *gin.Context,
-		) {
+		) error {
 	var (
 		messageType int
 		message []byte
 		err error
 		m any = nil
 	)
+
+	//check
+	if connId <= 0 || wsConn == nil || ctx == nil {
+		return errors.New("invalid parameter")
+	}
 
 	//defer
 	defer func() {
@@ -271,7 +287,7 @@ func (f *Router) processRequest(
 		//check
 		if &wsConn == nil {
 			log.Printf("Router:processRequest, ws connect is nil\n")
-			return
+			return errors.New("ws connect is nil")
 		}
 
 		//read original websocket data from client side
@@ -286,7 +302,7 @@ func (f *Router) processRequest(
 			if f.cbForClosed != nil {
 				f.cbForClosed(f.rc.Name, connId, ctx)
 			}
-			return
+			return err
 		}
 
 		//heart beat data check
@@ -303,4 +319,5 @@ func (f *Router) processRequest(
 			f.cbForRead(f.rc.Name, connId, messageType, message, ctx)
 		}
 	}
+	return err
 }

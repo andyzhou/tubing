@@ -31,6 +31,7 @@ type UriRouter struct {
 	BuffSize int //read and write buffer size
 
 	//relate cb func
+	CBForGenConnId func() int64
 	CBForConnected func(routerName string, connId int64, ctx *gin.Context) error
 	CBForClosed func(routerName string, connId int64, ctx *gin.Context) error
 	CBForRead func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
@@ -220,6 +221,26 @@ func (f *Server) SetGin(g *gin.Engine) error {
 	return nil
 }
 
+//start gin (optional)
+//used for service mode
+func (f *Server) StartGin(port int) error {
+	//check
+	if port <= 0 {
+		return errors.New("invalid parameter")
+	}
+	if f.gin == nil {
+		return errors.New("gin hadn't init yet")
+	}
+	if f.started {
+		return errors.New("server had started")
+	}
+	//start server
+	serverAddr := fmt.Sprintf(":%v", port)
+	go f.gin.Run(serverAddr)
+	f.started = true
+	return nil
+}
+
 //register websocket uri
 //methods include `GET` or `POST`
 func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
@@ -262,6 +283,7 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	}
 
 	//setup callback
+	router.SetCBForGenConnId(ur.CBForGenConnId)
 	router.SetCBForConnected(ur.CBForConnected)
 	router.SetCBForClosed(ur.CBForClosed)
 	router.SetCBForRead(ur.CBForRead)
@@ -280,42 +302,5 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	f.routerUris.Store(ur.RouterUri, ur.RouterName)
 	f.routers.Store(ur.RouterName, router)
 	atomic.AddInt32(&f.routerCount, 1)
-	return nil
-}
-
-//close
-func (f *Server) Close() error {
-	//try close all
-	sf := func(k, v interface{}) bool {
-		router, ok := v.(face.IRouter)
-		if ok && router != nil {
-			router.GetManager().Close()
-			f.routers.Delete(k)
-		}
-		return true
-	}
-	f.routers.Range(sf)
-	f.routers = sync.Map{}
-	f.routerUris = sync.Map{}
-	return nil
-}
-
-//start gin (optional)
-//used for service mode
-func (f *Server) StartGin(port int) error {
-	//check
-	if port <= 0 {
-		return errors.New("invalid parameter")
-	}
-	if f.gin == nil {
-		return errors.New("gin hadn't init yet")
-	}
-	if f.started {
-		return errors.New("server had started")
-	}
-	//start server
-	serverAddr := fmt.Sprintf(":%v", port)
-	go f.gin.Run(serverAddr)
-	f.started = true
 	return nil
 }

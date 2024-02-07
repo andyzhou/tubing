@@ -14,13 +14,6 @@ const (
 //default value
 const (
 	AppName = "tubing"
-	ClientHeartBeatRate = 10 //xx seconds
 	DefaultHeartBeatRate = 60 //xx seconds
 	DefaultBuckets = 5 //xx buckets
 )
-
-//const (
-//	HeaderOfContentType = "Content-Type"
-//	ContentTypeOfJson = "application/json"
-//	ContentTypeOfOctet = "application/octet"
-//)

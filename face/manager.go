@@ -185,6 +185,9 @@ func (f *Manager) SendMessage(
 func (f *Manager) CastMessage(
 				message []byte,
 				tags ...string) error {
+	var (
+		err error
+	)
 	//check
 	if message == nil || len(message) <= 0 {
 		return errors.New("invalid parameter")
@@ -192,17 +195,20 @@ func (f *Manager) CastMessage(
 
 	//filter by tags first
 	if tags != nil && len(tags) > 0 {
+		//get matched connect ids
 		connIds, _ := f.getConnIdsByTag(tags...)
-		if connIds != nil {
-			for _, connId := range connIds {
-				//get conn by id and write message
-				conn, _ := f.GetConn(connId)
-				if conn != nil {
-					conn.Write(f.msgType, message)
-				}
+		if connIds == nil || len(connIds) <= 0 {
+			return errors.New("no any matched conn ids by tag")
+		}
+		//cast to matched connect ids
+		for _, connId := range connIds {
+			//get conn by id and write message
+			conn, _ := f.GetConn(connId)
+			if conn != nil {
+				err = conn.Write(f.msgType, message)
 			}
 		}
-		return nil
+		return err
 	}
 
 	//cast message to all
@@ -212,11 +218,11 @@ func (f *Manager) CastMessage(
 			return true
 		}
 		//write message
-		conn.Write(f.msgType, message)
+		err = conn.Write(f.msgType, message)
 		return true
 	}
 	f.connMap.Range(sf)
-	return nil
+	return err
 }
 
 //get conn by id
@@ -273,11 +279,11 @@ func (f *Manager) Accept(
 
 	//init new connect
 	wsConn := NewWSConn(conn, connId)
-	wsConn.SetRemoteAddr(connRemoteAddr)
+	err := wsConn.SetRemoteAddr(connRemoteAddr)
 	f.connMap.Store(connId, wsConn)
 	f.connRemoteMap.Store(connRemoteAddr, connId)
 	atomic.AddInt64(&f.connCount, 1)
-	return wsConn, nil
+	return wsConn, err
 }
 
 //close conn with message
@@ -319,20 +325,6 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 		remoteAddr := conn.GetRemoteAddr()
 		if remoteAddr != "" {
 			f.connRemoteMap.Delete(remoteAddr)
-		}
-
-		//get conn tags
-		tags := conn.GetTags()
-		if tags != nil {
-			for tag, _ := range tags {
-				connMap, _ := f.connTagMap.Load(tag)
-				if connMap != nil {
-					connMapVal, _ := connMap.(map[int64]bool)
-					if connMapVal != nil {
-						delete(connMapVal, connId)
-					}
-				}
-			}
 		}
 
 		//remove relate data

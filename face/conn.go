@@ -103,7 +103,7 @@ func (f *WSConn) ConnIsActive(checkRates ...int) bool {
 	return true
 }
 
-//heart beat
+//heart beat for update active time
 func (f *WSConn) HeartBeat() {
 	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
 }
@@ -199,10 +199,7 @@ func (f *WSConn) CloseWithMessage(message string) error {
 	f.connLock.Lock()
 	defer f.connLock.Unlock()
 	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
-	err := f.conn.WriteMessage(websocket.CloseMessage, msg)
-	if err != nil {
-		return err
-	}
+	f.conn.WriteMessage(websocket.CloseMessage, msg)
 	return f.Close()
 }
 func (f *WSConn) Close() error {

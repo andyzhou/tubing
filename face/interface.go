@@ -32,11 +32,16 @@ type IConnManager interface {
 	HeartBeat(connId int64) error
 	SetHeartRate(rate int) error
 	SetMessageType(iType int)
+
+	RemoveTag(connId int64, tags ...string) error
+	MarkTag(connId int64, tags ...string) error
+
 	GetConn(connId int64) (IWSConn, error)
 	Accept(connId int64, conn *websocket.Conn) (IWSConn, error)
 	GenConnId() int64
 	GetMaxConnId() int64
 	GetConnCount() int64
+
 	CloseWithMessage(conn *websocket.Conn, message string) error
 	CloseConn(connIds ... int64) error
 	SetActiveSwitch(bool)
@@ -47,10 +52,14 @@ type IWSConn interface {
 	//adv
 	GetConnId() int64
 	GetRemoteAddr() string
+	ConnIsActive(checkRates ...int) bool
+
+	//tags
 	GetTags() map[string]bool
 	RemoveTags(tags ...string) error
 	MarkTags(tags ...string) error
-	ConnIsActive(checkRates ...int) bool
+
+	//property
 	VerifyProp(keys ...string) bool
 	DelProp(key string) error
 	GetAllProp() map[string]interface{}
