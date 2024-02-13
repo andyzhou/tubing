@@ -29,6 +29,8 @@ type UriRouter struct {
 	MsgType int
 	HeartByte []byte
 	BuffSize int //read and write buffer size
+	CheckActiveRate int //if 0 means not need check
+	MaxActiveSeconds int
 
 	//relate cb func
 	CBForGenConnId func() int64
@@ -269,6 +271,8 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 		MsgType: ur.MsgType,
 		BufferSize: ur.BuffSize,
 		HeartByte: ur.HeartByte,
+		CheckActiveRate: ur.CheckActiveRate,
+		MaxActiveSeconds: ur.MaxActiveSeconds,
 	}
 
 	//init new router

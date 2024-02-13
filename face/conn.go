@@ -84,30 +84,6 @@ func (f *WSConn) MarkTags(tags ...string) error {
 	return nil
 }
 
-//check conn is active
-func (f *WSConn) ConnIsActive(checkRates ...int) bool {
-	var (
-		checkRate int
-	)
-	if checkRates != nil && len(checkRates) > 0 {
-		checkRate = checkRates[0]
-	}
-	if checkRate <= 0 {
-		checkRate = define.DefaultHeartBeatRate
-	}
-	now := time.Now().Unix()
-	diff := now - f.activeTime
-	if diff >= int64(checkRate) {
-		return false
-	}
-	return true
-}
-
-//heart beat for update active time
-func (f *WSConn) HeartBeat() {
-	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
-}
-
 //verify properties
 //if exists return true, or face
 func (f *WSConn) VerifyProp(keys ...string) bool {
@@ -172,6 +148,30 @@ func (f *WSConn) SetProp(key string, val interface{}) error {
 	defer f.propLock.Unlock()
 	f.propMap[key] = val
 	return nil
+}
+
+//check conn is active
+func (f *WSConn) ConnIsActive(checkRates ...int) bool {
+	var (
+		checkRate int
+	)
+	if checkRates != nil && len(checkRates) > 0 {
+		checkRate = checkRates[0]
+	}
+	if checkRate <= 0 {
+		checkRate = define.DefaultHeartBeatRate
+	}
+	now := time.Now().Unix()
+	diff := now - f.activeTime
+	if diff >= int64(checkRate) {
+		return false
+	}
+	return true
+}
+
+//heart beat for update active time
+func (f *WSConn) HeartBeat() {
+	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
 }
 
 //write data

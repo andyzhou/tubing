@@ -22,28 +22,30 @@ import (
 type (
 	//router inter config
 	RouterCfg struct {
-		Name 		string
-		Uri 		string
-		MsgType 	int
-		BufferSize 	int
-		Buckets 	int
-		HeartByte 	[]byte
-		HeartRate	int //heart beat check rate, 0:no check
+		Name             string
+		Uri              string
+		MsgType          int
+		BufferSize       int
+		Buckets          int
+		HeartByte        []byte
+		HeartRate        int //heart beat check rate, 0:no check
+		CheckActiveRate  int //if 0 means not need check
+		MaxActiveSeconds int
 	}
 )
 
 //router info
 type Router struct {
-	rc *RouterCfg //reference cfg
+	rc          *RouterCfg //reference cfg
 	connManager IConnManager
 	cd          ICoder
-	upGrader websocket.Upgrader //ws up grader
+	upGrader    websocket.Upgrader //ws up grader
 
 	//cb func
 	cbForGenConnId func() int64
 	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
-	cbForClosed func(routerName string, connId int64, ctx *gin.Context) error
-	cbForRead func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
+	cbForClosed    func(routerName string, connId int64, ctx *gin.Context) error
+	cbForRead      func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
 }
 
 //construct
