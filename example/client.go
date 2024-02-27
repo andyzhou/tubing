@@ -11,13 +11,18 @@ import (
 
 //read message
 func readMessage(message *tubing.WebSocketMessage) error {
-	//log.Printf("readMessage, session:%v, message:%v\n", message.MessageType, string(message.Message))
+	log.Printf("readMessage, session:%v, message:%v\n",
+		message.MessageType, string(message.Message))
 	return nil
 }
 
 //send message
 func sendMessage(c *tubing.OneWSClient) {
 	for {
+		if c.IsClosed() {
+			time.Sleep(time.Second)
+			continue
+		}
 		message := []byte(fmt.Sprintf("hello %v", time.Now().Unix()))
 		err := c.SendMessage(message)
 		if err != nil {
@@ -43,6 +48,11 @@ func sendHeartBeat(c *tubing.OneWSClient) {
 	}
 }
 
+func cbForReadMessage(connId int64, messageType int, message []byte) error {
+	log.Printf("cbForReadMessage, connId:%v, messageType:%v, message:%v\n", connId, messageType, message)
+	return nil
+}
+
 func main() {
 	var (
 		wg sync.WaitGroup
@@ -58,10 +68,10 @@ func main() {
 
 	//init client
 	c := tubing.NewWebSocketClient()
+	c.SetCBForReadMessage(cbForReadMessage)
 	oneClient, err := c.CreateClient(para)
 	if err != nil {
-		log.Println("create client failed, err:", err.Error())
-		return
+		panic(any(err))
 	}
 
 	//spawn send message process

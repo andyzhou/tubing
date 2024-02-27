@@ -57,20 +57,9 @@ func GetServer() *Server {
 }
 
 //construct
-func NewServer(gs ... *gin.Engine) *Server {
-	var (
-		g *gin.Engine
-	)
-	//check and set default gin engine
-	if gs != nil && len(gs) > 0 {
-		g = gs[0]
-	}
-	if g == nil {
-		g = gin.Default()
-	}
+func NewServer() *Server {
 	//self init
 	this := &Server{
-		gin: g,
 		routerUris: sync.Map{},
 		routers: sync.Map{},
 	}

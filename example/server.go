@@ -48,11 +48,11 @@ func cbForConnected(
 	routerName string,
 	connId int64,
 	ctx *gin.Context) error {
-	log.Printf("cbForConnected, connId:%v\n", connId)
+	//log.Printf("cbForConnected, connId:%v\n", connId)
 
 	//get para
-	paras := ctx.Params
-	log.Printf("cbForConnected, paras:%v\n", paras)
+	//paras := ctx.Params
+	//log.Printf("cbForConnected, paras:%v\n", paras)
 
 	//get router
 	router, err := getRouterByName(routerName)
@@ -64,20 +64,20 @@ func cbForConnected(
 	}
 
 	//cast welcome message
-	conn, err := router.GetManager().GetConn(connId)
-	if err != nil || conn == nil {
-		log.Printf("cbForConnected, connId:%v, get conn failed, err:%v\n", connId, err)
+	conn, subErr := router.GetManager().GetConn(connId)
+	if subErr != nil || conn == nil {
+		log.Printf("cbForConnected, connId:%v, get conn failed, err:%v\n", connId, subErr)
 	}
 	messageType := define.MessageTypeOfJson
 	message := []byte("welcome you!")
 	err = conn.Write(messageType, message)
-	log.Printf("cbForConnected, connId:%v, send result:%v\n", connId, err)
+	//log.Printf("cbForConnected, connId:%v, send result:%v\n", connId, err)
 	return nil
 }
 
 //cb for ws close connect
 func cbForClosed(routerName string, connId int64, ctx ... *gin.Context) error {
-	log.Printf("cbForClosed, connId:%v\n", connId)
+	//log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
 
@@ -87,11 +87,11 @@ func cbForRead(
 	connId int64,
 	messageType int,
 	message []byte) error {
-	log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
-		connId, messageType, string(message))
 	if tb == nil {
 		return errors.New("tb not init yet")
 	}
+	log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
+		connId, messageType, string(message))
 
 	//decode message
 	messageObj := json.NewMessageJson()
@@ -180,7 +180,18 @@ func showHomePage(ctx *gin.Context) {
 }
 
 //create default gin
-func createGin() *gin.Engine {
+func createGin(isReleases ...bool) *gin.Engine {
+	var (
+		isRelease bool
+	)
+	//release mode check
+	if isReleases != nil && len(isReleases) > 0 {
+		isRelease = isReleases[0]
+	}
+	if isRelease {
+		gin.SetMode("release")
+	}
+
 	//init default gin and page
 	gin := gin.Default()
 
@@ -211,7 +222,7 @@ func startApp(c *cli.Context) error {
 	//server.Start()
 
 	//init default gin
-	gin := createGin()
+	gin := createGin(true)
 
 	//set router
 	ur := &tubing.UriRouter{

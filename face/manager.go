@@ -2,12 +2,12 @@ package face
 
 import (
 	"errors"
+	"github.com/andyzhou/tinylib/queue"
 	"github.com/gorilla/websocket"
 	"log"
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 /*
@@ -19,6 +19,7 @@ import (
 //manager info
 type Manager struct {
 	router IRouter //reference from outside
+	activeTicker *queue.Ticker
 	msgType int //reference from router
 	heartRate int //heart beat rate
 	connId int64 //connect id automatic
@@ -26,9 +27,6 @@ type Manager struct {
 	connRemoteMap map[string]int64 //remoteAddr -> connId
 	connTagMap sync.Map //tag -> map[int64]bool => connId -> bool
 	connCount int64
-	heartCheckChan chan struct{}
-	heartChan chan int //used for update heart beat rate
-	closeChan chan struct{}
 	activeSwitcher bool //used for check conn active or not
 	mapLock sync.RWMutex
 }
@@ -40,31 +38,26 @@ func NewManager(router IRouter) *Manager {
 		connMap: map[int64]IWSConn{},
 		connRemoteMap: map[string]int64{},
 		connTagMap: sync.Map{},
-		heartCheckChan: make(chan struct{}, 1),
-		heartChan: make(chan int, 1),
-		closeChan: make(chan struct{}, 1),
 	}
-	//spawn main process
-	go this.runMainProcess()
+	this.interInit()
 	return this
 }
 
 //close
 func (f *Manager) Close() {
+	if f.activeTicker != nil {
+		f.activeTicker.Quit()
+	}
 	f.mapLock.Lock()
 	defer f.mapLock.Unlock()
-	for k, v := range f.connMap {
-		v.Close()
-		delete(f.connMap, k)
+	for k, _ := range f.connMap {
+		f.CloseConn(k)
 	}
 	for k, _ := range f.connRemoteMap {
 		delete(f.connRemoteMap, k)
 	}
 	f.connMap = map[int64]IWSConn{}
 	f.connRemoteMap = map[string]int64{}
-	if f.closeChan != nil {
-		f.closeChan <- struct{}{}
-	}
 }
 
 //remove conn tag
@@ -127,15 +120,6 @@ func (f *Manager) MarkTag(connId int64, tags ...string) error {
 		f.connTagMap.Store(tag, v)
 	}
 	return nil
-}
-
-//set active check switch
-func (f *Manager) SetActiveSwitch(switcher bool) {
-	f.activeSwitcher = switcher
-	if switcher {
-		//start checker
-		f.heartCheckChan <- struct{}{}
-	}
 }
 
 //get cur max conn id
@@ -237,18 +221,6 @@ func (f *Manager) GetConn(connId int64) (IWSConn, error) {
 	return conn, nil
 }
 
-//set heart beat rate
-func (f *Manager) SetHeartRate(rate int) error {
-	if rate < 0 {
-		return errors.New("invalid parameter")
-	}
-	if f.heartChan == nil {
-		return errors.New("heart chan is nil")
-	}
-	f.heartChan <- rate
-	return nil
-}
-
 //accept websocket connect
 func (f *Manager) Accept(
 				connId int64,
@@ -292,6 +264,7 @@ func (f *Manager) CloseWithMessage(
 	defer f.mapLock.Unlock()
 	connId, _ := f.connRemoteMap[remoteAddr]
 	if connId > 0 {
+		//close connect from manager
 		f.CloseConn(connId)
 
 		//remove from bucket
@@ -306,6 +279,8 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 	if connIds == nil || len(connIds) <= 0 {
 		return errors.New("invalid parameter")
 	}
+
+	//loop check and close with locker
 	f.mapLock.Lock()
 	defer f.mapLock.Unlock()
 	needGc := false
@@ -328,13 +303,17 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 
 		//remove relate data
 		delete(f.connMap, connId)
+		atomic.AddInt64(&f.connCount, -1)
 		needGc = true
 	}
+
+	//check and release conn map
 	if f.connCount <= 0 {
 		f.connMap = map[int64]IWSConn{}
 		f.connRemoteMap = map[string]int64{}
 		atomic.StoreInt64(&f.connCount, 0)
 		if needGc {
+			log.Printf("tubing.server.manager.CloseConn, gc opt\n")
 			runtime.GC()
 		}
 	}
@@ -366,86 +345,21 @@ func (f *Manager) getConnIdsByTag(tags ...string) ([]int64, error) {
 	return result, nil
 }
 
-//check un-active conn
-func (f *Manager) checkUnActiveConn() {
-	f.mapLock.Lock()
-	defer f.mapLock.Unlock()
-	needGc := false
-	for k, conn := range f.connMap {
-		if f.activeSwitcher && !conn.ConnIsActive(f.heartRate) {
-			//un-active connect
-			//close and delete it
-			log.Printf("tubing.manager:checkUnActiveConn, conn:%v is un-active\n", k)
+//cb for active check ticker
+func (f *Manager) cbForActiveCheck() error {
+	for _, conn := range f.connMap {
+		if !conn.ConnIsActive(f.heartRate) {
 			f.CloseConn(conn.GetConnId())
-			delete(f.connMap, k)
-			atomic.AddInt64(&f.connCount, -1)
-			needGc = true
 		}
 	}
-	if f.connCount <= 0 {
-		atomic.StoreInt64(&f.connCount, 0)
-		if needGc {
-			runtime.GC()
-		}
-	}
+	return nil
 }
 
-//run main process
-func (f *Manager) runMainProcess() {
-	var (
-		rate int
-		isOk bool
-		m any = nil
-	)
-
-	//defer
-	defer func() {
-		if err := recover(); err != m {
-			log.Printf("tubing.manager:runMainProcess panic err:%v\n", err)
-		}
-		if f.heartCheckChan != nil {
-			close(f.heartCheckChan)
-		}
-		if f.heartChan != nil {
-			close(f.heartChan)
-		}
-	}()
-
-	//loop
-	for {
-		select {
-		case <- f.heartCheckChan:
-			{
-				//check and send next check
-				if f.heartRate > 0 && f.activeSwitcher {
-					//check un-active connect
-					go f.checkUnActiveConn()
-
-					//send next heart beta check ticker
-					sf := func() {
-						if f.heartCheckChan != nil {
-							f.heartCheckChan <- struct{}{}
-						}
-					}
-					delay := time.Second * time.Duration(f.heartRate)
-					time.AfterFunc(delay, sf)
-				}
-			}
-		case rate, isOk = <- f.heartChan:
-			if isOk && rate >= 0 {
-				//sync heart rate
-				f.heartRate = rate
-				if rate == 0 {
-					//stop heart check
-					f.activeSwitcher = false
-				}
-				if f.activeSwitcher {
-					//resend first heart check
-					f.heartCheckChan <- struct{}{}
-				}
-			}
-		case <- f.closeChan:
-			return
-		}
+//inter init
+func (f *Manager) interInit() {
+	activeCheckRate := f.router.GetConf().CheckActiveRate
+	if activeCheckRate > 0 {
+		f.activeTicker = queue.NewTicker(float64(activeCheckRate))
+		f.activeTicker.SetCheckerCallback(f.cbForActiveCheck)
 	}
 }

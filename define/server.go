@@ -6,14 +6,11 @@ const (
 	ReqMethodOfPost = "POST"
 )
 
-////request path
-//const (
-//	AnyPath = "any"
-//)
-
 //default value
 const (
 	AppName = "tubing"
+	DefaultConnectTicker = 0.1 //xx seconds
+	DefaultDialTimeOut = 5 //xx seconds
 	DefaultHeartBeatRate = 60 //xx seconds
 	DefaultBuckets = 5 //xx buckets
 	DefaultReadDataRate = float64(0.2)

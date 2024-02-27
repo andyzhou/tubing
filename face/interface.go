@@ -31,7 +31,6 @@ type IConnManager interface {
 	Close()
 	SendMessage(message []byte, connIds ... int64) error
 	CastMessage(message []byte, tags ...string) error
-	SetHeartRate(rate int) error
 	SetMessageType(iType int)
 
 	RemoveTag(connId int64, tags ...string) error
@@ -45,7 +44,6 @@ type IConnManager interface {
 
 	CloseWithMessage(conn *websocket.Conn, message string) error
 	CloseConn(connIds ... int64) error
-	SetActiveSwitch(bool)
 }
 
 //interface of connect

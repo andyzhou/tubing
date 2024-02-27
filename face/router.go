@@ -26,7 +26,6 @@ type (
 		BufferSize       int
 		Buckets          int
 		HeartByte        []byte
-		HeartRate        int //heart beat check rate, 0:no check
 		ReadByteRate	 float64 //read ws data rate
 		CheckActiveRate  int //if 0 means not need check
 		MaxActiveSeconds int
@@ -94,9 +93,6 @@ func NewRouter(rc *RouterCfg) *Router {
 
 	//setup manager
 	this.connManager.SetMessageType(rc.MsgType)
-	if rc.HeartRate > 0 {
-		this.connManager.SetHeartRate(rc.HeartRate)
-	}
 	return this
 }
 
@@ -111,15 +107,6 @@ func (f *Router) SetHeartByte(data []byte) error {
 		return errors.New("invalid parameter")
 	}
 	f.rc.HeartByte = data
-	return nil
-}
-
-//set heart beat rate
-func (f *Router) SetHeartRate(rate int) error {
-	if rate < 0 {
-		return errors.New("invalid parameter")
-	}
-	f.rc.HeartRate = rate
 	return nil
 }
 
@@ -245,9 +232,6 @@ func (f *Router) Entry(ctx *gin.Context) {
 			return
 		}
 	}
-
-	//spawn son process for request
-	//go f.processRequest(newConnId, wsConn, ctx)
 }
 
 //get connect manager

@@ -38,8 +38,7 @@ func readMessage(message *tubing.WebSocketMessage) error {
 
 //create ws client
 func createWsClient() (*tubing.OneWSClient, error) {
-	oneClient, err := client.CreateClient(para)
-	return oneClient, err
+	return client.CreateClient(para)
 }
 
 //test api
@@ -47,7 +46,6 @@ func TestCreate(t *testing.T) {
 	subClient, err := createWsClient()
 	if err != nil {
 		t.Errorf("test create failed, err:%v\n", err.Error())
-		return
 	}
 	t.Logf("test create succeed, conn id:%v\n", subClient.GetConnId())
 }
@@ -56,13 +54,22 @@ func TestCreate(t *testing.T) {
 func BenchmarkCreate(b *testing.B) {
 	succeed := 0
 	failed := 0
+	wsArr := make([]*tubing.OneWSClient, 0)
 	for i := 0; i < b.N; i++ {
-		_, err := createWsClient()
+		ws, err := createWsClient()
 		if err != nil {
 			failed++
-		}else{
-			succeed++
+			break
 		}
+		wsArr = append(wsArr, ws)
+		succeed++
 	}
-	b.Logf("benchmark create, succeed:%v, failed:%v\n", succeed, failed)
+	b.Logf("benchmark create done, N:%v, succeed:%v, failed:%v\n",
+		b.N, succeed, failed)
+	//close connect
+	for _, v := range wsArr {
+		v.Quit()
+	}
+	wsArr = []*tubing.OneWSClient{}
+	return
 }

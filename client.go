@@ -1,8 +1,10 @@
 package tubing
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/andyzhou/tinylib/queue"
 	"github.com/andyzhou/tubing/base"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
@@ -63,6 +65,7 @@ type OneWSClient struct {
 	isConnecting bool
 	forceClosed bool
 	autoConn bool //auto connect server switch
+	connLocker sync.RWMutex
 
 	//cb func
 	cbForReadMessage func(message *WebSocketMessage) error
@@ -78,6 +81,10 @@ type WebSocketClient struct {
 	autoConnect bool
 	connId int64 //atomic, maybe not same with server side
 	clientMap map[int64]*OneWSClient //connectId -> OneWSClient, c2s
+	consumerTicker *queue.Ticker
+
+	//cb setup
+	cbForReadMessage func(int64, int, []byte) error
 	sync.RWMutex
 }
 
@@ -90,11 +97,27 @@ func GetWSClient() *WebSocketClient {
 }
 
 //construct
-func NewWebSocketClient() *WebSocketClient {
+//consumeRates used for consume ticker rate
+func NewWebSocketClient(consumeRates ...float64) *WebSocketClient {
+	var (
+		consumeRate float64
+	)
+
+	//detect consume rate
+	if consumeRates != nil && len(consumeRates) > 0 {
+		consumeRate = consumeRates[0]
+	}
+	if consumeRate <= 0 {
+		consumeRate = define.DefaultConnectTicker
+	}
+
+	//self init
 	this := &WebSocketClient{
 		messageType: define.MessageTypeOfOctet,
 		clientMap: map[int64]*OneWSClient{},
+		consumerTicker: queue.NewTicker(consumeRate),
 	}
+	this.interInit()
 	return this
 }
 
@@ -134,6 +157,12 @@ func (f *WebSocketClient) SetHeartBeatRate(rate int) error {
 	return nil
 }
 
+//relate cb setup
+//cb for read server message
+func (f *WebSocketClient) SetCBForReadMessage(cb func(int64, int, []byte) error) {
+	f.cbForReadMessage = cb
+}
+
 //get clients
 func (f *WebSocketClient) GetClients() int {
 	return len(f.clientMap)
@@ -145,9 +174,12 @@ func (f *WebSocketClient) CreateClient(
 				connPara *WebSocketConnPara,
 			) (*OneWSClient, error) {
 	//init new websocket client
-	wsc, err := newOneWSClient(connPara, f.messageType)
+	wsc := newOneWSClient(connPara, f.messageType)
+
+	//dial server
+	err := wsc.dialServer()
 	if err != nil {
-		return nil, err
+		return wsc, nil
 	}
 
 	//gen connect id
@@ -241,6 +273,43 @@ func (f *WebSocketClient) getOneWSClient(connId int64) *OneWSClient {
 	return v
 }
 
+//cb for new client dial ticker
+func (f *WebSocketClient) cbForConsumerOpt() error {
+	var (
+		messageType int
+		message []byte
+		err error
+	)
+	//check
+	if len(f.clientMap) <= 0 {
+		return errors.New("no any client connect")
+	}
+
+	//loop check with locker
+	for connId, ws := range f.clientMap {
+		if ws == nil {
+			continue
+		}
+		//read message from server
+		messageType, message, err = ws.readServerMessage()
+		if err != nil {
+			continue
+		}
+		if messageType >= 0 && f.cbForReadMessage != nil {
+			f.cbForReadMessage(connId, messageType, message)
+		}
+
+		//write message to server
+		err = ws.writeServerMessage()
+	}
+	return nil
+}
+
+//inter init
+func (f *WebSocketClient) interInit() {
+	f.consumerTicker.SetCheckerCallback(f.cbForConsumerOpt)
+}
+
 //////////////////////
 //api for oneWSClient
 /////////////////////
@@ -248,7 +317,7 @@ func (f *WebSocketClient) getOneWSClient(connId int64) *OneWSClient {
 func newOneWSClient(
 			connPara *WebSocketConnPara,
 			msgType int,
-		) (*OneWSClient, error) {
+		) *OneWSClient {
 	//self init
 	this := &OneWSClient{
 		connPara: *connPara,
@@ -261,9 +330,12 @@ func newOneWSClient(
 		closeChan: make(chan bool, 1),
 		cbForReadMessage: connPara.CBForReadMessage,
 	}
-	//dial server
-	err := this.dialServer()
-	return this, err
+	return this
+}
+
+//quit
+func (f *OneWSClient) Quit() {
+	f.close()
 }
 
 //check connect
@@ -383,10 +455,11 @@ func (f *OneWSClient) close() {
 	//send close with locker
 	f.Lock()
 	defer f.Unlock()
-	f.forceClosed = true
-	select {
-	case f.closeChan <- true:
+	if f.conn != nil {
+		f.conn.Close()
+		f.conn = nil
 	}
+	f.forceClosed = true
 }
 
 //auto connect
@@ -448,19 +521,23 @@ func (f *OneWSClient) dialServer() error {
 		f.u.RawQuery = q.Encode()
 	}
 
-	//try dial server with locker
-	conn, _, err := websocket.DefaultDialer.Dial(f.u.String(), nil)
+	//try dial server with timeout
+	timeOut := time.Duration(define.DefaultDialTimeOut) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeOut)
+	defer cancel()
+
+	//dial server
+	f.isConnecting = true
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, f.u.String(), nil)
 	if err != nil {
 		f.isConnecting = false
 		return err
 	}
 
 	//sync connect
+	f.connLocker.Lock()
+	defer f.connLocker.Unlock()
 	f.conn = conn
-
-	//spawn son process
-	go f.readMessageFromServer()
-	go f.runMainProcess()
 	f.isConnecting = false
 	return nil
 }
@@ -473,6 +550,61 @@ func (f *OneWSClient) heartBeat() error {
 	err := f.SendMessage([]byte(define.MessageBodyOfHeartBeat))
 	return err
 }
+
+//read message from server side
+func (f *OneWSClient) readServerMessage() (int, []byte, error) {
+	//check
+	if f.conn == nil || f.forceClosed {
+		return 0, nil, errors.New("connect is closed")
+	}
+
+	//read original message
+	f.conn.SetReadDeadline(time.Now().Add(time.Duration(0.1 * float64(time.Second))))
+	messageType, message, err := f.conn.ReadMessage()
+	if err != nil {
+		if errors.Is(err, syscall.EPIPE) {
+			//auto connect
+			//f.autoConnect()
+			return 0, nil, err
+		}
+	}
+
+	//call cb for read message
+	if messageType >= 0 && f.cbForReadMessage != nil {
+		//packet data and send to chan
+		wsMsg := WebSocketMessage{
+			MessageType: messageType,
+			Message: message,
+		}
+		f.cbForReadMessage(&wsMsg)
+	}
+
+	return messageType, message, nil
+}
+
+//write message to server side
+func (f *OneWSClient) writeServerMessage() error {
+	//check
+	if f.conn == nil || f.forceClosed {
+		return errors.New("connect is closed")
+	}
+
+	//read message from chan
+	writeMessage, isOk := <- f.writeChan
+	if isOk && &writeMessage != nil {
+		err := f.conn.WriteMessage(f.msgType, writeMessage.Message)
+		if errors.Is(err, syscall.EPIPE) {
+			//auto connect
+			//f.autoConnect()
+			return err
+		}
+	}
+	return nil
+}
+
+//////////////////////////////////////
+//following code will be removed!!!
+//////////////////////////////////////
 
 //son process for send and receive
 func (f *OneWSClient) runMainProcess() {
@@ -490,8 +622,8 @@ func (f *OneWSClient) runMainProcess() {
 			log.Printf("WebSocketClient:runMainProcess panic, err:%v", subErr)
 		}
 		//stop and close
-		f.Lock()
-		defer f.Unlock()
+		f.connLocker.Lock()
+		defer f.connLocker.Unlock()
 		//heartTicker.Stop()
 		if f.conn != nil {
 			f.conn.Close()
@@ -584,20 +716,30 @@ func (f *OneWSClient) readMessageFromServer() {
 	for {
 		//check
 		if f.conn == nil {
-			log.Printf("WebSocketClient:readMessageFromServer connect is nil\n")
+			//log.Printf("WebSocketClient:readMessageFromServer connect is nil\n")
+			return
+		}
+		if f.forceClosed {
 			return
 		}
 
 		//read original message
 		messageType, message, err = f.conn.ReadMessage()
 		if err != nil {
-			log.Printf("WebSocketClient:readMessageFromServer failed, err:%v", err.Error())
+			//log.Printf("WebSocketClient:readMessageFromServer failed, connId:%v, err:%v",
+			//	f.connId, err.Error())
 			if errors.Is(err, syscall.EPIPE) {
-				log.Printf("WebSocketClient:readMessageFromServer write failed, broken pipe error\n")
+				//log.Printf("WebSocketClient:readMessageFromServer write failed, broken pipe error\n")
+				log.Printf("WebSocketClient:readMessageFromServer broken pipe error\n")
 				f.autoConnect()
 				return
 			}
 			if err == io.EOF {
+				log.Printf("WebSocketClient:readMessageFromServer EOF\n")
+				return
+			}
+			if err == websocket.ErrCloseSent {
+				log.Printf("WebSocketClient:readMessageFromServer ErrCloseSent\n")
 				return
 			}
 		}

@@ -242,12 +242,14 @@ func (f *Bucket) cbForReadConnData(
 		if err != nil {
 			//close connect and remove it
 			connObj.Close()
-			f.RemoveConnect(connId)
 
 			//check and call closed cb
 			if f.cbForConnClosed != nil {
 				f.cbForConnClosed(f.router.GetName(), connId)
 			}
+
+			//remove from manager
+			f.router.GetManager().CloseConn(connId)
 			continue
 		}
 		if bytes.Compare(f.router.GetHeartByte(), message) == 0 {
