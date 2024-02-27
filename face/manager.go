@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	"log"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,14 +18,13 @@ import (
 
 //manager info
 type Manager struct {
+	router IRouter //reference from outside
 	msgType int //reference from router
 	heartRate int //heart beat rate
 	connId int64 //connect id automatic
-	buckets int
-	bucketMap sync.Map //bucketId -> *Bucket
-	connMap sync.Map //connId -> IWSConn
+	connMap map[int64]IWSConn //connId -> IWSConn
+	connRemoteMap map[string]int64 //remoteAddr -> connId
 	connTagMap sync.Map //tag -> map[int64]bool => connId -> bool
-	connRemoteMap sync.Map //remoteAddr -> connId
 	connCount int64
 	heartCheckChan chan struct{}
 	heartChan chan int //used for update heart beat rate
@@ -34,20 +34,16 @@ type Manager struct {
 }
 
 //construct
-func NewManager(buckets int) *Manager {
+func NewManager(router IRouter) *Manager {
 	this := &Manager{
-		buckets: buckets,
-		bucketMap: sync.Map{},
-		connMap: sync.Map{},
+		router: router,
+		connMap: map[int64]IWSConn{},
+		connRemoteMap: map[string]int64{},
 		connTagMap: sync.Map{},
-		connRemoteMap: sync.Map{},
 		heartCheckChan: make(chan struct{}, 1),
 		heartChan: make(chan int, 1),
 		closeChan: make(chan struct{}, 1),
 	}
-	//inter init
-	this.interInit()
-
 	//spawn main process
 	go this.runMainProcess()
 	return this
@@ -55,15 +51,17 @@ func NewManager(buckets int) *Manager {
 
 //close
 func (f *Manager) Close() {
-	sf := func(k, v interface{}) bool {
-		conn, _ := v.(IWSConn)
-		if conn != nil {
-			conn.Close()
-		}
-		return true
+	f.mapLock.Lock()
+	defer f.mapLock.Unlock()
+	for k, v := range f.connMap {
+		v.Close()
+		delete(f.connMap, k)
 	}
-	f.connMap.Range(sf)
-	f.connMap = sync.Map{}
+	for k, _ := range f.connRemoteMap {
+		delete(f.connRemoteMap, k)
+	}
+	f.connMap = map[int64]IWSConn{}
+	f.connRemoteMap = map[string]int64{}
 	if f.closeChan != nil {
 		f.closeChan <- struct{}{}
 	}
@@ -212,16 +210,15 @@ func (f *Manager) CastMessage(
 	}
 
 	//cast message to all
-	sf := func(k, v interface{}) bool {
-		conn, ok := v.(IWSConn)
-		if !ok || conn == nil {
-			return true
+	f.mapLock.Lock()
+	defer f.mapLock.Unlock()
+	for _, v := range f.connMap {
+		if v == nil {
+			continue
 		}
 		//write message
-		err = conn.Write(f.msgType, message)
-		return true
+		err = v.Write(f.msgType, message)
 	}
-	f.connMap.Range(sf)
 	return err
 }
 
@@ -230,29 +227,14 @@ func (f *Manager) GetConn(connId int64) (IWSConn, error) {
 	if connId <= 0 {
 		return nil, errors.New("invalid parameter")
 	}
-	v, ok := f.connMap.Load(connId)
-	if !ok || v == nil {
+	//get with locker
+	f.mapLock.Lock()
+	defer f.mapLock.Unlock()
+	conn, ok := f.connMap[connId]
+	if !ok || conn == nil {
 		return nil, errors.New("no such connect")
 	}
-	conn, ok := v.(IWSConn)
-	if !ok {
-		return nil, errors.New("invalid ws connect")
-	}
 	return conn, nil
-}
-
-//heart beat
-func (f *Manager) HeartBeat(connId int64) error {
-	//check
-	if connId <= 0 {
-		return errors.New("invalid parameter")
-	}
-	conn, _ := f.GetConn(connId)
-	if conn == nil {
-		return errors.New("can't get conn by id")
-	}
-	conn.HeartBeat()
-	return nil
 }
 
 //set heart beat rate
@@ -280,9 +262,16 @@ func (f *Manager) Accept(
 	//init new connect
 	wsConn := NewWSConn(conn, connId)
 	err := wsConn.SetRemoteAddr(connRemoteAddr)
-	f.connMap.Store(connId, wsConn)
-	f.connRemoteMap.Store(connRemoteAddr, connId)
+
+	//add map with locker
+	f.mapLock.Lock()
+	defer f.mapLock.Unlock()
+	f.connMap[connId] = wsConn
+	f.connRemoteMap[connRemoteAddr] = connId
 	atomic.AddInt64(&f.connCount, 1)
+
+	//add new connect into bucket
+	f.router.GetBucket().AddConnect(wsConn)
 	return wsConn, err
 }
 
@@ -297,11 +286,16 @@ func (f *Manager) CloseWithMessage(
 	}
 	//get relate data by remote addr
 	remoteAddr := conn.RemoteAddr().String()
+
+	//get connect id by remote address
 	f.mapLock.Lock()
-	connId, _ := f.connRemoteMap.Load(remoteAddr)
-	connIdVal, _ := connId.(int64)
-	if connIdVal > 0 {
-		f.CloseConn(connIdVal)
+	defer f.mapLock.Unlock()
+	connId, _ := f.connRemoteMap[remoteAddr]
+	if connId > 0 {
+		f.CloseConn(connId)
+
+		//remove from bucket
+		f.router.GetBucket().RemoveConnect(connId)
 	}
 	return conn.Close()
 }
@@ -312,42 +306,37 @@ func (f *Manager) CloseConn(connIds ...int64) error {
 	if connIds == nil || len(connIds) <= 0 {
 		return errors.New("invalid parameter")
 	}
+	f.mapLock.Lock()
+	defer f.mapLock.Unlock()
+	needGc := false
 	for _, connId := range connIds {
 		//load and update
-		v, ok := f.connMap.Load(connId)
-		if !ok || v == nil {
+		conn, ok := f.connMap[connId]
+		if !ok || conn == nil {
 			continue
-		}
-		conn, _ := v.(IWSConn)
-		if conn == nil {
-			continue
-		}
-		remoteAddr := conn.GetRemoteAddr()
-		if remoteAddr != "" {
-			f.connRemoteMap.Delete(remoteAddr)
 		}
 
+		//close ws connect
+		conn.Close()
+		remoteAddr := conn.GetRemoteAddr()
+		if remoteAddr != "" {
+			delete(f.connRemoteMap, remoteAddr)
+		}
+
+		//remove from bucket
+		f.router.GetBucket().RemoveConnect(connId)
+
 		//remove relate data
-		f.connMap.Delete(connId)
-		atomic.AddInt64(&f.connCount, -1)
-		wsConn, subOk := v.(*WSConn)
-		if !subOk || wsConn == nil {
-			continue
-		}
-		//begin close and clear
-		err := wsConn.Close()
-		if err != nil {
-			continue
-		}
+		delete(f.connMap, connId)
+		needGc = true
 	}
 	if f.connCount <= 0 {
-		newConnMap := sync.Map{}
-		connTagMap := sync.Map{}
-		remoteMap := sync.Map{}
-		f.connMap = newConnMap
-		f.connTagMap = connTagMap
-		f.connRemoteMap = remoteMap
+		f.connMap = map[int64]IWSConn{}
+		f.connRemoteMap = map[string]int64{}
 		atomic.StoreInt64(&f.connCount, 0)
+		if needGc {
+			runtime.GC()
+		}
 	}
 	return nil
 }
@@ -379,23 +368,25 @@ func (f *Manager) getConnIdsByTag(tags ...string) ([]int64, error) {
 
 //check un-active conn
 func (f *Manager) checkUnActiveConn() {
-	sf := func(k, v interface{}) bool {
-		conn, ok := v.(IWSConn)
-		if ok && conn != nil {
-			if f.activeSwitcher && !conn.ConnIsActive(f.heartRate) {
-				//un-active connect
-				//close and delete it
-				log.Printf("tubing.manager:checkUnActiveConn, conn:%v is un-active\n", k)
-				f.CloseConn(conn.GetConnId())
-				f.connMap.Delete(k)
-				atomic.AddInt64(&f.connCount, -1)
-			}
+	f.mapLock.Lock()
+	defer f.mapLock.Unlock()
+	needGc := false
+	for k, conn := range f.connMap {
+		if f.activeSwitcher && !conn.ConnIsActive(f.heartRate) {
+			//un-active connect
+			//close and delete it
+			log.Printf("tubing.manager:checkUnActiveConn, conn:%v is un-active\n", k)
+			f.CloseConn(conn.GetConnId())
+			delete(f.connMap, k)
+			atomic.AddInt64(&f.connCount, -1)
+			needGc = true
 		}
-		return true
 	}
-	f.connMap.Range(sf)
-	if f.connCount < 0 {
+	if f.connCount <= 0 {
 		atomic.StoreInt64(&f.connCount, 0)
+		if needGc {
+			runtime.GC()
+		}
 	}
 }
 
@@ -456,38 +447,5 @@ func (f *Manager) runMainProcess() {
 		case <- f.closeChan:
 			return
 		}
-	}
-}
-
-//get target bucket by connect id
-func (f *Manager) getTargetBucket(connId int64) (*Bucket, error) {
-	//check
-	if connId <= 0 {
-		return nil, errors.New("invalid parameter")
-	}
-
-	//get hash idx and bucket
-	hashIdx := int(connId % int64(f.buckets))
-	v, ok := f.bucketMap.Load(hashIdx)
-	if !ok || v == nil {
-		//init new
-		v = NewBucket(hashIdx)
-		f.bucketMap.Store(hashIdx, v)
-	}
-
-	//detect value
-	b, ok := v.(*Bucket)
-	if ok && b != nil {
-		return b, nil
-	}
-	return nil, errors.New("can't get bucket")
-}
-
-//inter init
-func (f *Manager) interInit() {
-	//init inter bucket
-	for i := 0; i < f.buckets; i++ {
-		b := NewBucket(i)
-		f.bucketMap.Store(i, b)
 	}
 }

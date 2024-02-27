@@ -11,7 +11,7 @@ import (
 
 //read message
 func readMessage(message *tubing.WebSocketMessage) error {
-	log.Printf("readMessage, session:%v, message:%v\n", message.MessageType, string(message.Message))
+	//log.Printf("readMessage, session:%v, message:%v\n", message.MessageType, string(message.Message))
 	return nil
 }
 

@@ -64,9 +64,14 @@ func (f *WSConn) GetTags() map[string]bool {
 
 //remove tags
 func (f *WSConn) RemoveTags(tags ...string) error {
+	//check
 	if tags == nil || len(tags) <= 0 {
 		return errors.New("invalid parameter")
 	}
+
+	//del mark with locker
+	f.propLock.Lock()
+	defer f.propLock.Unlock()
 	for _, tag := range tags {
 		delete(f.tagMap, tag)
 	}
@@ -75,9 +80,14 @@ func (f *WSConn) RemoveTags(tags ...string) error {
 
 //mark tags
 func (f *WSConn) MarkTags(tags ...string) error {
+	//check
 	if tags == nil || len(tags) <= 0 {
 		return errors.New("invalid parameter")
 	}
+
+	//mark with locker
+	f.propLock.Lock()
+	defer f.propLock.Unlock()
 	for _, tag := range tags {
 		f.tagMap[tag] = true
 	}
@@ -91,7 +101,10 @@ func (f *WSConn) VerifyProp(keys ...string) bool {
 	if keys == nil || len(keys) <= 0 {
 		return false
 	}
-	//loop verify
+
+	//loop verify with locker
+	f.propLock.Lock()
+	defer f.propLock.Unlock()
 	for _, key := range keys {
 		_, ok := f.propMap[key]
 		if ok {
@@ -103,6 +116,7 @@ func (f *WSConn) VerifyProp(keys ...string) bool {
 
 //get all property
 func (f *WSConn) GetAllProp() map[string]interface{} {
+	//get with locker
 	f.propLock.Lock()
 	defer f.propLock.Unlock()
 	return f.propMap
@@ -114,6 +128,7 @@ func (f *WSConn) GetProp(key string) (interface{}, error) {
 	if key == "" {
 		return nil, errors.New("invalid parameter")
 	}
+
 	//get prop with locker
 	f.propLock.Lock()
 	defer f.propLock.Unlock()
@@ -130,6 +145,7 @@ func (f *WSConn) DelProp(key string) error {
 	if key == "" {
 		return errors.New("invalid parameter")
 	}
+
 	//del prop with locker
 	f.propLock.Lock()
 	defer f.propLock.Unlock()
@@ -143,6 +159,7 @@ func (f *WSConn) SetProp(key string, val interface{}) error {
 	if key == "" || val == nil || val == "" {
 		return errors.New("invalid parameter")
 	}
+
 	//set prop with locker
 	f.propLock.Lock()
 	defer f.propLock.Unlock()
@@ -176,26 +193,35 @@ func (f *WSConn) HeartBeat() {
 
 //write data
 func (f *WSConn) Write(messageType int, data []byte) error {
-	f.connLock.Lock()
-	defer f.connLock.Unlock()
+	//check
 	if f.conn == nil {
 		return errors.New("invalid ws connect")
 	}
+
+	//write message with locker
 	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
+	f.connLock.Lock()
+	defer f.connLock.Unlock()
 	return f.conn.WriteMessage(messageType, data)
 }
 
 //read data
 //return messageType, data, error
 func (f *WSConn) Read() (int, []byte, error) {
+	//check
 	if f.conn == nil {
 		return 0, nil, errors.New("invalid ws connect")
 	}
+
+	//read message with locker
+	f.connLock.Lock()
+	defer f.connLock.Unlock()
 	return f.conn.ReadMessage()
 }
 
 //close conn
 func (f *WSConn) CloseWithMessage(message string) error {
+	//close with locker
 	f.connLock.Lock()
 	defer f.connLock.Unlock()
 	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
@@ -203,6 +229,7 @@ func (f *WSConn) CloseWithMessage(message string) error {
 	return f.Close()
 }
 func (f *WSConn) Close() error {
+	//close with locker
 	f.connLock.Lock()
 	defer f.connLock.Unlock()
 	return f.conn.Close()

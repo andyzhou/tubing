@@ -17,8 +17,10 @@ type IRouter interface {
 	Entry(c *gin.Context)
 	GetUriPara(name string, ctx *gin.Context) string
 	GetManager() IConnManager
+	GetBucket() *Bucket
 	GetCoder() ICoder
 	GetName() string
+	GetConf() *RouterCfg
 	GetHeartByte() []byte
 	SetHeartByte(data []byte) error
 	SetMessageType(iType int) error
@@ -29,7 +31,6 @@ type IConnManager interface {
 	Close()
 	SendMessage(message []byte, connIds ... int64) error
 	CastMessage(message []byte, tags ...string) error
-	HeartBeat(connId int64) error
 	SetHeartRate(rate int) error
 	SetMessageType(iType int)
 

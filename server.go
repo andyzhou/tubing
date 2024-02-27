@@ -35,8 +35,8 @@ type UriRouter struct {
 	//relate cb func
 	CBForGenConnId func() int64
 	CBForConnected func(routerName string, connId int64, ctx *gin.Context) error
-	CBForClosed func(routerName string, connId int64, ctx *gin.Context) error
-	CBForRead func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
+	CBForClosed func(routerName string, connId int64, ctx ...*gin.Context) error
+	CBForRead func(routerName string, connId int64, messageType int, message []byte) error
 }
 
 //face info
@@ -225,7 +225,10 @@ func (f *Server) SetGin(g *gin.Engine) error {
 
 //start gin (optional)
 //used for service mode
-func (f *Server) StartGin(port int) error {
+func (f *Server) StartGin(port int, isReleases ...bool) error {
+	var (
+		isRelease bool
+	)
 	//check
 	if port <= 0 {
 		return errors.New("invalid parameter")
@@ -236,14 +239,23 @@ func (f *Server) StartGin(port int) error {
 	if f.started {
 		return errors.New("server had started")
 	}
+
+	//release mode check
+	if isReleases != nil && len(isReleases) > 0 {
+		isRelease = isReleases[0]
+	}
+	if isRelease {
+		gin.SetMode("release")
+	}
+
 	//start server
 	serverAddr := fmt.Sprintf(":%v", port)
-	go f.gin.Run(serverAddr)
 	f.started = true
+	go f.gin.Run(serverAddr)
 	return nil
 }
 
-//register websocket uri
+//register websocket uri, support multi instances
 //methods include `GET` or `POST`
 func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	//check

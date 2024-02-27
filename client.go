@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -50,9 +51,9 @@ type WebSocketConnPara struct {
 type OneWSClient struct {
 	connPara WebSocketConnPara
 	msgType int
-	id int64
 	u *url.URL
 	conn *websocket.Conn
+	connId int64
 	interrupt chan os.Signal
 	heartBeatChan chan struct{}
 	heartBeatRate int
@@ -75,9 +76,9 @@ type WebSocketClient struct {
 	messageType int
 	heartBeatRate int
 	autoConnect bool
-	clientId int64
-	clients int64
-	clientMap sync.Map //clientId -> OneWSClient, c2s
+	connId int64 //atomic, maybe not same with server side
+	clientMap map[int64]*OneWSClient //connectId -> OneWSClient, c2s
+	sync.RWMutex
 }
 
 //get single instance
@@ -92,7 +93,7 @@ func GetWSClient() *WebSocketClient {
 func NewWebSocketClient() *WebSocketClient {
 	this := &WebSocketClient{
 		messageType: define.MessageTypeOfOctet,
-		clientMap: sync.Map{},
+		clientMap: map[int64]*OneWSClient{},
 	}
 	return this
 }
@@ -105,15 +106,14 @@ func (f *WebSocketClient) SetMessageType(iType int) {
 	//sync type
 	f.messageType = iType
 
-	//sync running clients
-	sf := func(k, v interface{}) bool{
-		wsc, ok := v.(*OneWSClient)
-		if ok && wsc != nil {
-			wsc.SetMsgType(iType)
+	//sync running clients with locker
+	f.Lock()
+	defer f.Unlock()
+	for _, v := range f.clientMap {
+		if v != nil {
+			v.SetMsgType(iType)
 		}
-		return true
 	}
-	f.clientMap.Range(sf)
 }
 
 //set auto connect switch
@@ -135,8 +135,8 @@ func (f *WebSocketClient) SetHeartBeatRate(rate int) error {
 }
 
 //get clients
-func (f *WebSocketClient) GetClients() int64 {
-	return f.clients
+func (f *WebSocketClient) GetClients() int {
+	return len(f.clientMap)
 }
 
 //create new c2s client
@@ -144,58 +144,53 @@ func (f *WebSocketClient) GetClients() int64 {
 func (f *WebSocketClient) CreateClient(
 				connPara *WebSocketConnPara,
 			) (*OneWSClient, error) {
-	//gen new client id
-	newClientId := atomic.AddInt64(&f.clientId, 1)
-
 	//init new websocket client
 	wsc, err := newOneWSClient(connPara, f.messageType)
 	if err != nil {
 		return nil, err
 	}
 
-	//set key data
-	wsc.id = newClientId
+	//gen connect id
+	connId := atomic.AddInt64(&f.connId, 1)
+	wsc.connId = connId
 
-	//sync into map
-	f.clientMap.Store(newClientId, wsc)
-	atomic.AddInt64(&f.clients, 1)
+	//sync into map with locker
+	f.Lock()
+	defer f.Unlock()
+	f.clientMap[connId] = wsc
 	return wsc, nil
 }
 
 //close
 func (f *WebSocketClient) Close() {
-	if f.clients <= 0 {
-		return
-	}
-	sf := func(k, v interface {}) bool {
-		clientId, _ := k.(int64)
-		wsc, _ := v.(*OneWSClient)
-		if clientId > 0 && wsc != nil {
-			wsc.close()
+	f.Lock()
+	defer f.Unlock()
+	for k, v := range f.clientMap {
+		if v != nil {
+			v.close()
 		}
-		f.clientMap.Delete(clientId)
-		return true
+		delete(f.clientMap, k)
 	}
-	f.clientMap.Range(sf)
-	atomic.StoreInt64(&f.clients, 0)
+	runtime.GC()
 }
 
 //close connect
-func (f *WebSocketClient) CloseConn(connId int64) error {
-	if connId <= 0 {
+func (f *WebSocketClient) CloseConn(connectId int64) error {
+	if connectId <= 0 {
 		return errors.New("invalid parameter")
 	}
-	oneWSClient := f.getOneWSClient(connId)
+	oneWSClient := f.getOneWSClient(connectId)
 	if oneWSClient == nil {
 		return errors.New("no client by id")
 	}
-	//close and cleanup
+	//close and cleanup with locker
+	f.Lock()
+	defer f.Unlock()
 	oneWSClient.close()
-	f.clientMap.Delete(connId)
-	atomic.AddInt64(&f.clients, -1)
-	if f.clients < 0 {
-		atomic.StoreInt64(&f.clients, 0)
-		f.clientMap = sync.Map{}
+	delete(f.clientMap, connectId)
+	if len(f.clientMap) <= 0 {
+		f.clientMap = map[int64]*OneWSClient{}
+		runtime.GC()
 	}
 	return nil
 }
@@ -206,45 +201,44 @@ func (f *WebSocketClient) CloseConn(connId int64) error {
 
 //notify auto connect to all sub ws client
 func (f *WebSocketClient) notifyAutoConnect() {
-	if f.clients <= 0 {
+	if len(f.clientMap) <= 0 {
 		return
 	}
-	sf := func(k, v interface{}) bool {
-		swc, ok := v.(*OneWSClient)
-		if ok && swc != nil {
-			swc.SetAutoConnect(f.autoConnect)
+	//opt with locker
+	f.Lock()
+	defer f.Unlock()
+	for _, v := range f.clientMap {
+		if v != nil {
+			v.SetAutoConnect(f.autoConnect)
 		}
-		return true
 	}
-	f.clientMap.Range(sf)
 }
 
 //notify heart beat rate to all sub ws client
 func (f *WebSocketClient) notifyHeartBeatRate() {
-	if f.clients <= 0 {
+	if len(f.clientMap) <= 0 {
 		return
 	}
-	sf := func(k, v interface{}) bool {
-		swc, ok := v.(*OneWSClient)
-		if ok && swc != nil {
-			swc.SetHeartBeatRate(f.heartBeatRate)
+	//opt with locker
+	f.Lock()
+	defer f.Unlock()
+	for _, v := range f.clientMap {
+		if v != nil {
+			v.SetHeartBeatRate(f.heartBeatRate)
 		}
-		return true
 	}
-	f.clientMap.Range(sf)
 }
 
 //get one websocket client by session
 func (f *WebSocketClient) getOneWSClient(connId int64) *OneWSClient {
-	v, ok := f.clientMap.Load(connId)
+	//get with locker
+	f.Lock()
+	defer f.Unlock()
+	v, ok := f.clientMap[connId]
 	if !ok || v == nil {
 		return nil
 	}
-	conn, ok := v.(*OneWSClient)
-	if !ok {
-		return nil
-	}
-	return conn
+	return v
 }
 
 //////////////////////
@@ -282,7 +276,7 @@ func (f *OneWSClient) IsClosed() bool {
 
 //get conn id
 func (f *OneWSClient) GetConnId() int64 {
-	return f.id
+	return f.connId
 }
 
 //set msg type
@@ -425,8 +419,6 @@ func (f *OneWSClient) dialServer() error {
 		}
 	}()
 
-	f.Lock()
-	defer f.Unlock()
 	if f.conn != nil {
 		return errors.New("client conn not nil")
 	}

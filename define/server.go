@@ -16,4 +16,5 @@ const (
 	AppName = "tubing"
 	DefaultHeartBeatRate = 60 //xx seconds
 	DefaultBuckets = 5 //xx buckets
+	DefaultReadDataRate = float64(0.2)
 )

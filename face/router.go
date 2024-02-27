@@ -1,12 +1,10 @@
 package face
 
 import (
-	"bytes"
 	"errors"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"io"
 	"log"
 	"net/http"
 	"runtime/debug"
@@ -29,6 +27,7 @@ type (
 		Buckets          int
 		HeartByte        []byte
 		HeartRate        int //heart beat check rate, 0:no check
+		ReadByteRate	 float64 //read ws data rate
 		CheckActiveRate  int //if 0 means not need check
 		MaxActiveSeconds int
 	}
@@ -37,6 +36,7 @@ type (
 //router info
 type Router struct {
 	rc          *RouterCfg //reference cfg
+	bucket 		*Bucket
 	connManager IConnManager
 	cd          ICoder
 	upGrader    websocket.Upgrader //ws up grader
@@ -44,8 +44,8 @@ type Router struct {
 	//cb func
 	cbForGenConnId func() int64
 	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
-	cbForClosed    func(routerName string, connId int64, ctx *gin.Context) error
-	cbForRead      func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
+	cbForClosed    func(routerName string, connId int64, ctx... *gin.Context) error
+	cbForRead      func(routerName string, connId int64, messageType int, message []byte) error
 }
 
 //construct
@@ -59,6 +59,9 @@ func NewRouter(rc *RouterCfg) *Router {
 	}
 	if rc.Buckets <= 0 {
 		rc.Buckets = define.DefaultBuckets
+	}
+	if rc.ReadByteRate <= 0 {
+		rc.ReadByteRate = define.DefaultReadDataRate
 	}
 
 	//setup upgrade
@@ -80,11 +83,14 @@ func NewRouter(rc *RouterCfg) *Router {
 
 	//self init
 	this := &Router{
-		rc: rc,
-		upGrader: upGrader,
-		connManager: NewManager(rc.Buckets),
+		rc:          rc,
+		upGrader:    upGrader,
 		cd:          NewCoder(),
 	}
+
+	//init bucket and manager
+	this.bucket = NewBucket(this)
+	this.connManager = NewManager(this)
 
 	//setup manager
 	this.connManager.SetMessageType(rc.MsgType)
@@ -145,19 +151,21 @@ func (f *Router) SetCBForConnected(cb func(routerName string, connId int64, ctx 
 }
 
 //set cb func for conn closed
-func (f *Router) SetCBForClosed(cb func(routerName string, connId int64, ctx *gin.Context) error) {
+func (f *Router) SetCBForClosed(cb func(routerName string, connId int64, ctx ...*gin.Context) error) {
 	if cb == nil {
 		return
 	}
 	f.cbForClosed = cb
+	f.bucket.SetCBForConnClosed(cb)
 }
 
 //set cb func for read data
-func (f *Router) SetCBForRead(cb func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error) {
+func (f *Router) SetCBForRead(cb func(routerName string, connId int64, messageType int, message []byte) error) {
 	if cb == nil {
 		return
 	}
 	f.cbForRead = cb
+	f.bucket.SetCBForReadMessage(cb)
 }
 
 //get coder
@@ -210,7 +218,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 	}
 
 	//accept new connect
-	wsConn, subErr := f.connManager.Accept(newConnId, conn)
+	_, subErr := f.connManager.Accept(newConnId, conn)
 	if subErr != nil {
 		//accept failed
 		log.Printf("Router:Entry, accept connect failed, err:%v\n", subErr.Error())
@@ -239,7 +247,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 	}
 
 	//spawn son process for request
-	go f.processRequest(newConnId, wsConn, ctx)
+	//go f.processRequest(newConnId, wsConn, ctx)
 }
 
 //get connect manager
@@ -247,79 +255,89 @@ func (f *Router) GetManager() IConnManager {
 	return f.connManager
 }
 
+//get connect bucket
+func (f *Router) GetBucket() *Bucket {
+	return f.bucket
+}
+
 //get name
 func (f *Router) GetName() string {
 	return f.rc.Name
+}
+
+//get config
+func (f *Router) GetConf() *RouterCfg {
+	return f.rc
 }
 
 //////////////
 //private func
 //////////////
 
-//process one connect request, include read, write, etc.
-//run as son process, one conn one process
-func (f *Router) processRequest(
-			connId int64,
-			wsConn IWSConn,
-			ctx *gin.Context,
-		) error {
-	var (
-		messageType int
-		message []byte
-		err error
-		m any = nil
-	)
-
-	//check
-	if connId <= 0 || wsConn == nil || ctx == nil {
-		return errors.New("invalid parameter")
-	}
-
-	//defer
-	defer func() {
-		if subErr := recover(); subErr != m {
-			log.Printf("Router:processRequest panic, err:%v, stack:%v",
-				subErr, string(debug.Stack()))
-		}
-		f.connManager.CloseConn(connId)
-	}()
-
-	//loop select
-	for {
-		//check
-		if &wsConn == nil {
-			log.Printf("Router:processRequest, ws connect is nil\n")
-			return errors.New("ws connect is nil")
-		}
-
-		//read original websocket data from client side
-		messageType, message, err = wsConn.Read()
-		if err != nil {
-			if err == io.EOF {
-				log.Printf("Router:processRequest, read EOF need close.")
-			}else{
-				log.Printf("Router:processRequest, read err:%v", err.Error())
-			}
-			//connect closed
-			if f.cbForClosed != nil {
-				f.cbForClosed(f.rc.Name, connId, ctx)
-			}
-			return err
-		}
-
-		//heart beat data check
-		if f.rc.HeartRate > 0 && f.rc.HeartByte != nil && message != nil {
-			if bytes.Compare(f.rc.HeartByte, message) == 0 {
-				//it's heart beat data
-				f.connManager.HeartBeat(connId)
-				continue
-			}
-		}
-
-		//check and run cb for read message
-		if f.cbForRead != nil {
-			f.cbForRead(f.rc.Name, connId, messageType, message, ctx)
-		}
-	}
-	return err
-}
+////process one connect request, include read, write, etc.
+////run as son process, one conn one process
+//func (f *Router) processRequest(
+//			connId int64,
+//			wsConn IWSConn,
+//			ctx *gin.Context,
+//		) error {
+//	var (
+//		messageType int
+//		message []byte
+//		err error
+//		m any = nil
+//	)
+//
+//	//check
+//	if connId <= 0 || wsConn == nil || ctx == nil {
+//		return errors.New("invalid parameter")
+//	}
+//
+//	//defer
+//	defer func() {
+//		if subErr := recover(); subErr != m {
+//			log.Printf("Router:processRequest panic, err:%v, stack:%v",
+//				subErr, string(debug.Stack()))
+//		}
+//		f.connManager.CloseConn(connId)
+//	}()
+//
+//	//loop select
+//	for {
+//		//check
+//		if &wsConn == nil {
+//			log.Printf("Router:processRequest, ws connect is nil\n")
+//			return errors.New("ws connect is nil")
+//		}
+//
+//		//read original websocket data from client side
+//		messageType, message, err = wsConn.Read()
+//		if err != nil {
+//			if err == io.EOF {
+//				log.Printf("Router:processRequest, read EOF need close.")
+//			}else{
+//				log.Printf("Router:processRequest, read err:%v", err.Error())
+//			}
+//			//connect closed
+//			if f.cbForClosed != nil {
+//				f.cbForClosed(f.rc.Name, connId)
+//			}
+//			return err
+//		}
+//
+//		//heart beat data check
+//		if f.rc.HeartRate > 0 && f.rc.HeartByte != nil && message != nil {
+//			if bytes.Compare(f.rc.HeartByte, message) == 0 {
+//				//it's heart beat data
+//				wsConn.HeartBeat()
+//				continue
+//			}
+//		}
+//
+//		//check and run cb for read message
+//		if f.cbForRead != nil {
+//			f.cbForRead(f.rc.Name, connId, messageType, message)
+//		}
+//	}
+//	return err
+//}

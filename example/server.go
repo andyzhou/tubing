@@ -44,7 +44,10 @@ func signalProcess() {
 }
 
 //cb for ws first connect
-func cbForConnected(routerName string, connId int64, ctx *gin.Context) error {
+func cbForConnected(
+	routerName string,
+	connId int64,
+	ctx *gin.Context) error {
 	log.Printf("cbForConnected, connId:%v\n", connId)
 
 	//get para
@@ -73,13 +76,17 @@ func cbForConnected(routerName string, connId int64, ctx *gin.Context) error {
 }
 
 //cb for ws close connect
-func cbForClosed(routerName string, connId int64, ctx *gin.Context) error {
+func cbForClosed(routerName string, connId int64, ctx ... *gin.Context) error {
 	log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
 
 //cb for ws read message
-func cbForRead(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error {
+func cbForRead(
+	routerName string,
+	connId int64,
+	messageType int,
+	message []byte) error {
 	log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
 		connId, messageType, string(message))
 	if tb == nil {

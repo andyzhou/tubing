@@ -18,4 +18,5 @@ log
 .idea
 *_darwin
 tubing_*
+vendor/
 
