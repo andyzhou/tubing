@@ -5,6 +5,8 @@
 var userId = 0;
 var userNick = "";
 var wsConn = null;
+var delay = 500; //0.5 second
+var delayRate = 500; //0.5 second
 
 //sign up new channel
 function chat_server_sign_up(serverAddr) {
@@ -106,7 +108,20 @@ function chat_server_message(message) {
         //not json data, just display message
         finalMessage = message
     }
-    chat_message_append($("<div/>").text(finalMessage));
+
+    //delay scroll to div bottom
+    clearTimeout(delay);
+
+    //setup new delay
+    delay = setTimeout(function () {
+        //append new message
+        chat_message_append($("<div/>").text(finalMessage));
+
+        //scroll to div bottom
+        console.log("chat_server_message, msg:"+message);
+        var logDiv = $("#log");
+        logDiv.scrollTop(logDiv[0].scrollHeight);
+    }, delayRate);
 }
 
 

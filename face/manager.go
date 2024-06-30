@@ -13,7 +13,8 @@ import (
 /*
  * @author Andy Chow <diudiu8848@163.com>
  * websocket manager
- * bucket hashed by ws conn id
+ * - one router one manager
+ * - bucket hashed by ws conn id
  */
 
 //manager info
@@ -45,9 +46,12 @@ func NewManager(router IRouter) *Manager {
 
 //close
 func (f *Manager) Close() {
+	//close ticker
 	if f.activeTicker != nil {
 		f.activeTicker.Quit()
 	}
+
+	//clear connections
 	f.mapLock.Lock()
 	defer f.mapLock.Unlock()
 	for k, _ := range f.connMap {
@@ -58,6 +62,9 @@ func (f *Manager) Close() {
 	}
 	f.connMap = map[int64]IWSConn{}
 	f.connRemoteMap = map[string]int64{}
+
+	//gc member
+	runtime.GC()
 }
 
 //remove conn tag
@@ -75,13 +82,13 @@ func (f *Manager) RemoveTag(connId int64, tags ...string) error {
 	}
 
 	//remove tags
+	f.mapLock.Lock()
+	defer f.mapLock.Unlock()
 	for _, tag := range tags {
 		tagVal, _ := f.connTagMap.Load(tag)
 		tempMap, _ := tagVal.(map[int64]bool)
 		if tempMap != nil {
-			f.mapLock.Lock()
 			delete(tempMap, connId)
-			f.mapLock.Unlock()
 		}
 	}
 	conn.RemoveTags(tags...)
@@ -223,8 +230,8 @@ func (f *Manager) GetConn(connId int64) (IWSConn, error) {
 
 //accept websocket connect
 func (f *Manager) Accept(
-				connId int64,
-				conn *websocket.Conn) (IWSConn, error) {
+	connId int64,
+	conn *websocket.Conn) (IWSConn, error) {
 	//check
 	if connId <= 0 || conn == nil {
 		return nil, errors.New("invalid parameter")
@@ -249,13 +256,20 @@ func (f *Manager) Accept(
 
 //close conn with message
 func (f *Manager) CloseWithMessage(
-			conn *websocket.Conn,
-			message string) error {
+	conn *websocket.Conn,
+	message string) error {
+	//check
+	if conn == nil {
+		return errors.New("invalid parameter")
+	}
+
+	//write ws message
 	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
 	err := conn.WriteMessage(websocket.CloseMessage, msg)
 	if err != nil {
 		return err
 	}
+
 	//get relate data by remote addr
 	remoteAddr := conn.RemoteAddr().String()
 

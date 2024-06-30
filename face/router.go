@@ -50,8 +50,9 @@ type Router struct {
 //construct
 func NewRouter(rc *RouterCfg) *Router {
 	//default value setup
-	if rc.MsgType < define.MessageTypeOfJson {
-		rc.MsgType = define.MessageTypeOfOctet
+	if rc.MsgType < define.MessageTypeOfJson ||
+		rc.MsgType > define.MessageTypeOfOctet {
+		rc.MsgType = define.MessageTypeOfJson
 	}
 	if rc.BufferSize <= 0 {
 		rc.BufferSize = define.DefaultBuffSize

@@ -20,7 +20,8 @@ import (
 
 const (
 	RouterName = "test"
-	RouterUri = "/ws"
+	RouterUri  = "/ws"
+	ServerPort = 8090
 )
 
 var (
@@ -245,7 +246,7 @@ func startApp(c *cli.Context) error {
 
 	//try start service
 	wg.Add(1)
-	err = tb.StartGin(8090)
+	err = tb.StartGin(ServerPort)
 	if err != nil {
 		return err
 	}

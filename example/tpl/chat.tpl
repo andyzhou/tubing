@@ -5,10 +5,9 @@
 <style type="text/css">
 .message {
     font-size: 16px;
-    min-width:300px;
-    width:500px;
-    min-height: 300px;
-    height: auto;
+    width:520px;
+    height: 300px;
+    overflow-y:auto;
     padding: 2px 2px 2px 2px;
     margin-bottom: 5px;
     margin-right: 5px;
@@ -25,7 +24,7 @@
 欢迎进入直播聊天室..
 </div>
 <div class="genDiv">
-  <input type="text" id="msg" size="70"/>
+  <input type="text" id="msg" size="51"/>
   <input type="submit" id="sendBtn" value="发送"/>
 </div>
 

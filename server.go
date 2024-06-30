@@ -6,6 +6,7 @@ import (
 	"github.com/andyzhou/tubing/define"
 	"github.com/andyzhou/tubing/face"
 	"github.com/gin-gonic/gin"
+	"runtime"
 	"sync"
 	"sync/atomic"
 )
@@ -87,6 +88,9 @@ func (f *Server) Quit() {
 	}
 	f.routers = sync.Map{}
 	f.routerUris = sync.Map{}
+
+	//memory gc
+	runtime.GC()
 }
 
 //remove one url by name
@@ -121,6 +125,8 @@ func (f *Server) RemoveUriByName(name string) error {
 		atomic.StoreInt32(&f.routerCount, 0)
 		f.routers = sync.Map{}
 		f.routerUris = sync.Map{}
+		//gc memory
+		runtime.GC()
 	}
 	return nil
 }
@@ -144,13 +150,18 @@ func (f *Server) GetUri(name string) (string, error) {
 	var (
 		uri string
 	)
+	//check
 	if name == "" {
 		return "", errors.New("invalid parameter")
 	}
+
+	//loop check and get uri by name
 	sf := func(k, v interface{}) bool {
 		tempName, ok := v.(string)
+		//check and compare name
 		if ok && tempName != "" && tempName == name {
-			name, _ = k.(string)
+			//get uri value
+			uri, _ = k.(string)
 			return false
 		}
 		return true
@@ -161,6 +172,7 @@ func (f *Server) GetUri(name string) (string, error) {
 
 //get router uri name
 func (f *Server) GetUriName(uri string) (string, error) {
+	//check
 	if uri == "" {
 		return "", errors.New("invalid parameter")
 	}
@@ -168,8 +180,8 @@ func (f *Server) GetUriName(uri string) (string, error) {
 	if !ok || v == nil {
 		return "", nil
 	}
-	name, ok := v.(string)
-	if !ok || name == "" {
+	name, subOk := v.(string)
+	if !subOk || name == "" {
 		return "", nil
 	}
 	return name, nil
@@ -254,6 +266,8 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	if f.gin == nil {
 		return errors.New("inter gin engine not init yet")
 	}
+
+	//get router name by uri
 	name, _ := f.GetUriName(ur.RouterUri)
 	if name != "" {
 		return errors.New("router uri had exists")

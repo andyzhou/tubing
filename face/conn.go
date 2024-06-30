@@ -11,7 +11,7 @@ import (
 
 /*
  * @author Andy Chow <diudiu8848@163.com>
- * websocket connect
+ * one websocket connect
  * reflect.DeepEqual(x, y)
  */
 
@@ -23,6 +23,7 @@ type WSConn struct {
 	tagMap map[string]bool
 	remoteAddr string
 	activeTime int64
+	tagLock sync.RWMutex
 	propLock sync.RWMutex
 	connLock sync.RWMutex
 }
@@ -59,6 +60,8 @@ func (f *WSConn) SetRemoteAddr(addr string) error {
 
 //get tags
 func (f *WSConn) GetTags() map[string]bool {
+	f.tagLock.Lock()
+	defer f.tagLock.Unlock()
 	return f.tagMap
 }
 
@@ -70,8 +73,8 @@ func (f *WSConn) RemoveTags(tags ...string) error {
 	}
 
 	//del mark with locker
-	f.propLock.Lock()
-	defer f.propLock.Unlock()
+	f.tagLock.Lock()
+	defer f.tagLock.Unlock()
 	for _, tag := range tags {
 		delete(f.tagMap, tag)
 	}
@@ -86,8 +89,8 @@ func (f *WSConn) MarkTags(tags ...string) error {
 	}
 
 	//mark with locker
-	f.propLock.Lock()
-	defer f.propLock.Unlock()
+	f.tagLock.Lock()
+	defer f.tagLock.Unlock()
 	for _, tag := range tags {
 		f.tagMap[tag] = true
 	}
@@ -199,7 +202,9 @@ func (f *WSConn) Write(messageType int, data []byte) error {
 	}
 
 	//write message with locker
-	atomic.StoreInt64(&f.activeTime, time.Now().Unix())
+	defer func() {
+		atomic.StoreInt64(&f.activeTime, time.Now().Unix())
+	}()
 	f.connLock.Lock()
 	defer f.connLock.Unlock()
 	return f.conn.WriteMessage(messageType, data)
