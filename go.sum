@@ -1,6 +1,10 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/andyzhou/tinylib v0.0.0-20240226124614-734ec112cb72 h1:9efeKBrXmY2PaRx887Dq/3Guji/zmWwrf5hrJOVxOSQ=
 github.com/andyzhou/tinylib v0.0.0-20240226124614-734ec112cb72/go.mod h1:+gRhI0BpR4tOc2+ibW1nlnpPQ+dGqu9C1DS42vo7u0E=
+github.com/andyzhou/tinylib v0.0.0-20240625130326-11f8baede124 h1:lTVbIoIURdWBcYGDNg2b51V0NHlLch04bGZKFcmPqBQ=
+github.com/andyzhou/tinylib v0.0.0-20240625130326-11f8baede124/go.mod h1:YKvZB0RhvbGcDkErvI5Ul5ZdnMUwLnNuyfFlBNYADT8=
+github.com/andyzhou/tinylib v0.0.0-20240703022329-951a78a9b059 h1:gZxdrXYfzlkTuPJZPkFy7qQ33iKRcj/tfSbTG5PLbTY=
+github.com/andyzhou/tinylib v0.0.0-20240703022329-951a78a9b059/go.mod h1:YKvZB0RhvbGcDkErvI5Ul5ZdnMUwLnNuyfFlBNYADT8=
 github.com/bytedance/sonic v1.5.0/go.mod h1:ED5hyg4y6t3/9Ku1R6dU/4KyJ48DZ4jPhfY1O2AihPM=
 github.com/bytedance/sonic v1.9.1 h1:6iJ6NqdoxCDr6mbY8h18oSO+cShGSMRGCEo7F2h0x8s=
 github.com/bytedance/sonic v1.9.1/go.mod h1:i736AoUSYt75HyZLoJW9ERYxcy6eaN6h4BZXU064P/U=

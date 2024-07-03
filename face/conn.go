@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +19,7 @@ import (
 //web socket connect info
 type WSConn struct {
 	connId int64 //connect id
+	ownerId int64
 	conn *websocket.Conn //reference
 	propMap map[string]interface{}
 	tagMap map[string]bool
@@ -94,6 +96,21 @@ func (f *WSConn) MarkTags(tags ...string) error {
 	for _, tag := range tags {
 		f.tagMap[tag] = true
 	}
+	return nil
+}
+
+//get owner id
+func (f *WSConn) GetOwnerId() int64 {
+	return f.ownerId
+}
+
+//set owner id
+func (f *WSConn) SetOwnerId(ownerId int64) error {
+	//check
+	if ownerId <= 0 {
+		return errors.New("invalid parameter")
+	}
+	f.ownerId = ownerId
 	return nil
 }
 
@@ -202,11 +219,11 @@ func (f *WSConn) Write(messageType int, data []byte) error {
 	}
 
 	//write message with locker
+	//f.connLock.Lock()
 	defer func() {
 		atomic.StoreInt64(&f.activeTime, time.Now().Unix())
+		//f.connLock.Unlock()
 	}()
-	f.connLock.Lock()
-	defer f.connLock.Unlock()
 	return f.conn.WriteMessage(messageType, data)
 }
 
@@ -219,23 +236,33 @@ func (f *WSConn) Read() (int, []byte, error) {
 	}
 
 	//read message with locker
-	f.connLock.Lock()
-	defer f.connLock.Unlock()
+	//f.connLock.Lock()
+	//defer f.connLock.Unlock()
 	return f.conn.ReadMessage()
 }
 
 //close conn
 func (f *WSConn) CloseWithMessage(message string) error {
 	//close with locker
-	f.connLock.Lock()
-	defer f.connLock.Unlock()
+	//f.connLock.Lock()
+	//defer f.connLock.Unlock()
 	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
 	f.conn.WriteMessage(websocket.CloseMessage, msg)
 	return f.Close()
 }
 func (f *WSConn) Close() error {
 	//close with locker
-	f.connLock.Lock()
-	defer f.connLock.Unlock()
-	return f.conn.Close()
+	//f.connLock.Lock()
+	//defer f.connLock.Unlock()
+	err := f.conn.Close()
+	if err != nil {
+		return err
+	}
+
+	//release memory
+	f.propMap = map[string]interface{}{}
+	f.tagMap = map[string]bool{}
+	runtime.GC()
+
+	return nil
 }

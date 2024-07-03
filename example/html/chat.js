@@ -46,6 +46,8 @@ function chat_server_login(userId, userNick) {
     if(typeof(wsConn) == "undefined" || wsConn == null) {
         return;
     }
+    console.log("chat_server_login, userId:"+userId+", userNick:"+userNick);
+
     //create json object
     var loginObj = new Object();
     loginObj.id = userId

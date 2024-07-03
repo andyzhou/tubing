@@ -78,7 +78,7 @@ func cbForConnected(
 
 //cb for ws close connect
 func cbForClosed(routerName string, connId int64, ctx ... *gin.Context) error {
-	//log.Printf("cbForClosed, connId:%v\n", connId)
+	log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
 
@@ -102,9 +102,9 @@ func cbForRead(
 	}
 
 	//get router
-	router, err := getRouterByName(routerName)
-	if err != nil {
-		return err
+	router, subErr := getRouterByName(routerName)
+	if subErr != nil {
+		return subErr
 	}
 	if router == nil {
 		return errors.New("invalid router name")
@@ -150,9 +150,15 @@ func cbForRead(
 					userNickStr, _ := userNick.(string)
 					chatObj.Sender = userNickStr
 				}
-				//cast to all
 				newChatBytes, _ := chatObj.Encode(chatObj)
-				err = router.GetManager().CastMessage(newChatBytes)
+
+				//setup send msg para
+				sendMsgPara := &define.SendMsgPara{
+					Msg: newChatBytes,
+				}
+
+				//cast to all
+				err = router.GetManager().SendMessage(sendMsgPara)
 				if err != nil {
 					log.Println("cast chat message failed, err:", err.Error())
 					return err
@@ -231,6 +237,7 @@ func startApp(c *cli.Context) error {
 		RouterUri: RouterUri,
 		MsgType: define.MessageTypeOfJson,
 		HeartByte: []byte(define.MessageBodyOfHeartBeat),
+		CheckActiveRate: 2, //2 seconds
 		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,
 		CBForRead: cbForRead,

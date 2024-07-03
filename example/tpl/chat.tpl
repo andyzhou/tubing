@@ -31,9 +31,13 @@
 <script type="text/javascript">
 var chatServerAddr = "localhost:8090/ws";
 var chatServerChannel = "test";
-var userId = 1;
-var userNick = "xxxx";
-var userSession = "1234";
+
+//set user id
+var now = new Date();
+var mSeconds = now.getMilliseconds();
+var userId = mSeconds;
+var userNick = "user_"+mSeconds;
+var userSession = "session"+mSeconds;
 
 $(function() {
   //begin connect chat server

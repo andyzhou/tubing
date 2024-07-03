@@ -1,6 +1,7 @@
 package face
 
 import (
+	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -13,40 +14,63 @@ import (
 
 //interface of router
 type IRouter interface {
-	Close()
+	Quit()
 	Entry(c *gin.Context)
+
+	//get opt
 	GetUriPara(name string, ctx *gin.Context) string
 	GetManager() IConnManager
-	GetBucket() *Bucket
 	GetCoder() ICoder
 	GetName() string
 	GetConf() *RouterCfg
 	GetHeartByte() []byte
+	GetRouterCfg() *RouterCfg
+
+	//set opt
 	SetHeartByte(data []byte) error
 	SetMessageType(iType int) error
 }
 
 //interface of manager
 type IConnManager interface {
-	Close()
-	SendMessage(message []byte, connIds ... int64) error
-	CastMessage(message []byte, tags ...string) error
+	Quit()
+	SendMessage(para *define.SendMsgPara) error
 	SetMessageType(iType int)
 
-	RemoveTag(connId int64, tags ...string) error
-	MarkTag(connId int64, tags ...string) error
+	GetBuckets() map[int]IBucket
+	GetBucket(id int) (IBucket, error)
 
+	CloseWithMessage(conn *websocket.Conn, message string) error
 	GetConn(connId int64) (IWSConn, error)
 	Accept(connId int64, conn *websocket.Conn) (IWSConn, error)
 	GenConnId() int64
-	GetMaxConnId() int64
-	GetConnCount() int64
 
-	CloseWithMessage(conn *websocket.Conn, message string) error
-	CloseConn(connIds ... int64) error
+	//cb opt
+	SetCBForReadMessage(cb func(string, int64, int, []byte) error)
+	SetCBForConnClosed(cb func(string, int64, ...*gin.Context) error)
 }
 
-//interface of connect
+//interface of bucket
+type IBucket interface {
+	//other opt
+	Quit()
+
+	//opt for message
+	SendMessage(para *define.SendMsgPara) error
+
+	//opt for connect
+	GetAllConnect() map[int64]IWSConn
+	GetConnect(connId int64) (IWSConn, error)
+	CloseConnect(connIds ...int64) error
+	AddConnect(conn IWSConn) error
+
+	//opt for cb func
+	SetCBForReadMessage(cb func(string, int64, int, []byte) error)
+	SetCBForConnClosed(cb func(string, int64, ...*gin.Context) error)
+	SetMsgType(msgType int)
+}
+
+//interface of ws connect
 type IWSConn interface {
 	//adv
 	GetConnId() int64
@@ -57,6 +81,10 @@ type IWSConn interface {
 	GetTags() map[string]bool
 	RemoveTags(tags ...string) error
 	MarkTags(tags ...string) error
+
+	//owner id
+	GetOwnerId() int64
+	SetOwnerId(ownerId int64) error
 
 	//property
 	VerifyProp(keys ...string) bool

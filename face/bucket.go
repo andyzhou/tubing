@@ -3,8 +3,13 @@ package face
 import (
 	"bytes"
 	"errors"
+	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+	"log"
+	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/andyzhou/tinylib/queue"
 )
@@ -12,24 +17,42 @@ import (
 /*
  * @author Andy Chow <diudiu8848@163.com>
  * connect bucket
- * - batch buckets contain all ws connects
- * - one son worker contain batch connect
+ * - one router batch buckets
+ * - one bucket contain batch ws connect
+ * - use list and ticker mode for send and read msg
  */
 
 //face info
 type Bucket struct {
+	//inter obj
+	bucketId int
 	router IRouter //reference from outside
-	worker *queue.Worker
+	readMsgTicker *queue.Ticker //ticker for read connect msg
+	sendMsgQueue *queue.List //inter queue for send message
+
+	activeTicker *queue.Ticker
+	msgType int //reference from router
+	heartRate int //heart beat rate
+
+	//run env data
+	connMap map[int64]IWSConn //connId -> IWSConn
+	connRemoteMap map[string]int64 //remoteAddr -> connId
+	connCount int64
+	activeSwitcher bool //used for check conn active or not
+
+	//cb func
 	cbForReadMessage func(string, int64, int, []byte) error
 	cbForConnClosed func(string, int64, ...*gin.Context) error
 	sync.RWMutex
 }
 
 //construct
-func NewBucket(router IRouter) *Bucket {
+func NewBucket(id int, router IRouter) *Bucket {
 	this := &Bucket{
+		bucketId: id,
 		router: router,
-		worker: queue.NewWorker(),
+		connMap: map[int64]IWSConn{},
+		connRemoteMap: map[string]int64{},
 	}
 	this.interInit()
 	return this
@@ -37,7 +60,13 @@ func NewBucket(router IRouter) *Bucket {
 
 //quit
 func (f *Bucket) Quit() {
-	f.worker.Quit()
+	//close inter ticker
+	if f.readMsgTicker != nil {
+		f.readMsgTicker.Quit()
+	}
+
+	//free memory
+	f.freeRunMemory()
 }
 
 //////////////////
@@ -45,6 +74,7 @@ func (f *Bucket) Quit() {
 //////////////////
 
 //set cb for read message, step-1-1
+//cb func(routeName, connectId, msgType, msgData) error
 func (f *Bucket) SetCBForReadMessage(cb func(string, int64, int, []byte) error)  {
 	if cb == nil {
 		return
@@ -60,23 +90,9 @@ func (f *Bucket) SetCBForConnClosed(cb func(string, int64, ...*gin.Context) erro
 	f.cbForConnClosed = cb
 }
 
-////set cb for bind connects read opt, step-2
-//func (f *Bucket) SetCBForReadOpt(cb func(int32, ...interface{}) error) {
-//	if cb == nil {
-//		return
-//	}
-//	f.worker.SetCBForBindObjTickerOpt(cb)
-//}
-
-//create batch son workers, step-3
-func (f *Bucket) CreateSonWorkers(num int, tickRates ...float64) error {
-	//check
-	if num <= 0 {
-		return errors.New("invalid parameter")
-	}
-	//create batch son workers
-	err := f.worker.CreateWorkers(num, tickRates...)
-	return err
+//set message type
+func (f *Bucket) SetMsgType(msgType int) {
+	f.msgType = msgType
 }
 
 ///////////////////////
@@ -84,43 +100,17 @@ func (f *Bucket) CreateSonWorkers(num int, tickRates ...float64) error {
 ///////////////////////
 
 //send sync message
-func (f *Bucket) SendMessage(data interface{}, connectIds ...int64) error {
+func (f *Bucket) SendMessage(para *define.SendMsgPara) error {
 	//check
-	if data == nil || connectIds == nil {
+	if para == nil || para.Msg == nil {
 		return errors.New("invalid parameter")
 	}
-
-	//send to target workers
-	_, err := f.worker.SendData(data, connectIds)
-	return err
-}
-
-func (f *Bucket) SendMessageToWorker(data interface{}, workerId int32) error {
-	//check
-	if data == nil || workerId <= 0 {
-		return errors.New("invalid parameter")
+	if f.sendMsgQueue == nil {
+		return errors.New("inter send message queue is nil")
 	}
 
-	//get target worker
-	sonWorker, err := f.worker.GetWorker(workerId)
-	if err != nil || sonWorker == nil {
-		return err
-	}
-
-	//send to target worker
-	_, err = sonWorker.SendData(data)
-	return err
-}
-
-//cast async message to all son workers
-func (f *Bucket) CastMessage(data interface{}) error {
-	//check
-	if data == nil {
-		return errors.New("invalid parameter")
-	}
-
-	//cast to all
-	err := f.worker.CastData(data)
+	//save into running queue
+	err := f.sendMsgQueue.Push(para)
 	return err
 }
 
@@ -128,106 +118,153 @@ func (f *Bucket) CastMessage(data interface{}) error {
 //api for connect
 //////////////////
 
+//get all connections
+func (f *Bucket) GetAllConnect() map[int64]IWSConn {
+	return f.connMap
+}
+
 //get connect by id
-func (f *Bucket) GetConnect(connId int64) (*WSConn, error) {
+func (f *Bucket) GetConnect(connId int64) (IWSConn, error) {
 	//check
 	if connId <= 0 {
 		return nil, errors.New("invalid parameter")
 	}
 
-	//get target son worker
-	sonWorker, err := f.worker.GetTargetWorker(connId)
-	if err != nil {
-		return nil, err
-	}
-	if sonWorker == nil {
-		return nil, errors.New("can't get son worker")
-	}
-
-	//get connect
-	obj, subErr := sonWorker.GetBindObj(connId)
-	if subErr != nil || obj == nil {
-		return nil, subErr
-	}
-	conn, ok := obj.(*WSConn)
-	if !ok || conn == nil {
-		return nil, errors.New("invalid obj type")
-	}
-	return conn, nil
+	//get ws conn by id
+	f.Lock()
+	defer f.Unlock()
+	v, _ := f.connMap[connId]
+	return v, nil
 }
 
-//remove connect
-func (f *Bucket) RemoveConnect(connId int64) error {
-	//check
-	if connId <= 0 {
-		return errors.New("invalid parameter")
-	}
-
-	//get target son worker
-	sonWorker, err := f.worker.GetTargetWorker(connId)
-	if err != nil {
-		return err
-	}
-	if sonWorker == nil {
-		return errors.New("can't get son worker")
-	}
-
-	//remove connect from target son worker
-	err = sonWorker.RemoveBindObj(connId)
-	return err
-}
-
-//add new connect
-func (f *Bucket) AddConnect(conn *WSConn) error {
+//close conn with message
+func (f *Bucket) CloseWithMessage(conn *websocket.Conn, message string) error {
 	//check
 	if conn == nil {
 		return errors.New("invalid parameter")
 	}
 
-	//get target son worker
-	connId := conn.GetConnId()
-	sonWorker, err := f.worker.GetTargetWorker(connId)
+	//write ws message
+	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
+	err := conn.WriteMessage(websocket.CloseMessage, msg)
 	if err != nil {
 		return err
 	}
-	if sonWorker == nil {
-		return errors.New("can't get son worker")
+
+	//get relate data by remote addr
+	remoteAddr := conn.RemoteAddr().String()
+
+	//get connect id by remote address
+	f.Lock()
+	defer f.Unlock()
+	connId, _ := f.connRemoteMap[remoteAddr]
+	if connId > 0 {
+		//close connect from manager
+		f.CloseConnect(connId)
+	}
+	return nil
+}
+
+//close connect
+func (f *Bucket) CloseConnect(connIds ...int64) error {
+	//check
+	if connIds == nil || len(connIds) <= 0 {
+		return errors.New("invalid parameter")
 	}
 
-	//save new connect into target son worker
-	err = sonWorker.UpdateBindObj(connId, conn)
-	return err
+	//loop opt
+	succeed := 0
+	for _, connId := range connIds {
+		//load and update
+		conn, ok := f.connMap[connId]
+		if !ok || conn == nil {
+			continue
+		}
+
+		//connect close
+		conn.Close()
+
+		//run env data clean
+		remoteAddr := conn.GetRemoteAddr()
+		if remoteAddr != "" {
+			delete(f.connRemoteMap, remoteAddr)
+		}
+		delete(f.connMap, connId)
+		atomic.AddInt64(&f.connCount, -1)
+		succeed++
+	}
+
+	//check and run gc
+	if succeed > 0 && f.connCount <= 0 {
+		f.connMap = map[int64]IWSConn{}
+		f.connRemoteMap = map[string]int64{}
+		atomic.StoreInt64(&f.connCount, 0)
+		runtime.GC()
+		log.Printf("tubing.server.manager.CloseConn, gc opt\n")
+	}
+	return nil
+}
+
+//add new connect
+func (f *Bucket) AddConnect(conn IWSConn) error {
+	//check
+	if conn == nil || conn.GetConnId() <= 0 {
+		return errors.New("invalid parameter")
+	}
+
+	//get key data
+	connectId := conn.GetConnId()
+	remoteAddr := conn.GetRemoteAddr()
+
+	//add into running data
+	f.Lock()
+	defer f.Unlock()
+	f.connMap[connectId] = conn
+	f.connRemoteMap[remoteAddr] = connectId
+	atomic.AddInt64(&f.connCount, 1)
+	return nil
 }
 
 ///////////////
 //private func
 ///////////////
 
+//close connect
+func (f *Bucket) closeConnect(conn IWSConn) error {
+	//check
+	if conn == nil {
+		return errors.New("invalid parameter")
+	}
+
+	//close ws connect
+	conn.Close()
+
+	//remove from run env
+	remoteAddr := conn.GetRemoteAddr()
+	if remoteAddr != "" {
+		delete(f.connRemoteMap, remoteAddr)
+	}
+
+	delete(f.connMap, conn.GetConnId())
+	atomic.AddInt64(&f.connCount, -1)
+	return nil
+}
+
 //cb for read connect data
-func (f *Bucket) cbForReadConnData(
-	workerId int32,
-	connMaps ...interface{}) error {
+func (f *Bucket) cbForReadConnData() error {
 	var (
 		messageType int
 		message []byte
 		err error
 	)
 	//check
-	if workerId <= 0 || connMaps == nil ||
-		len(connMaps) <= 0 {
-		return errors.New("invalid parameter")
-	}
-	mapVal := connMaps[0]
-	if mapVal == nil {
-		return errors.New("invalid conn map data")
-	}
-	connMap, ok := mapVal.(map[int64]interface{})
-	if !ok || connMap == nil || len(connMap) <= 0 {
-		return errors.New("no any conn map data")
+	if f.connCount <= 0 || f.connMap == nil {
+		return errors.New("no any active connections")
 	}
 
 	//loop read connect data
-	for connId, conn := range connMap {
+	hasCloseOpt := false
+	for connId, conn := range f.connMap {
 		//check connect
 		if connId <= 0 || conn == nil {
 			continue
@@ -248,8 +285,9 @@ func (f *Bucket) cbForReadConnData(
 				f.cbForConnClosed(f.router.GetName(), connId)
 			}
 
-			//remove from manager
-			f.router.GetManager().CloseConn(connId)
+			//remove from bucket
+			f.closeConnect(conn)
+			hasCloseOpt = true
 			continue
 		}
 		if bytes.Compare(f.router.GetHeartByte(), message) == 0 {
@@ -263,23 +301,149 @@ func (f *Bucket) cbForReadConnData(
 			f.cbForReadMessage(f.router.GetName(), connId, messageType, message)
 		}
 	}
+
+	//check gc or not
+	if hasCloseOpt && f.connCount <= 0 {
+		f.freeRunMemory()
+	}
 	return err
 }
 
-//batch son workers
-func (f *Bucket) createSonWorkers() {
-	buckets := f.router.GetConf().Buckets
-	readRate := f.router.GetConf().ReadByteRate
-	for i := 0; i < buckets; i++ {
-		f.CreateSonWorkers(i, readRate)
+//cb for send msg consumer
+func (f *Bucket) cbForConsumerSendData(data interface{}) error {
+	var (
+		checkPass bool
+		err error
+	)
+	//check
+	if data == nil {
+		return errors.New("invalid parameter")
 	}
+	sendPara, ok := data.(*define.SendMsgPara)
+	if !ok || sendPara == nil || sendPara.Msg == nil {
+		return errors.New("invalid parameter")
+	}
+
+	//loop send
+	for _, v := range f.connMap {
+		//check
+		if v == nil {
+			continue
+		}
+		//check send condition
+		checkPass = f.checkSendCondition(sendPara, v)
+		if !checkPass {
+			continue
+		}
+		//send message to target connect
+		err = v.Write(f.msgType, sendPara.Msg)
+		if err != nil {
+			log.Printf("bucket.cbForConsumerSendData failed, err:%v\n", err.Error())
+		}
+	}
+	return err
+}
+
+//check send condition
+//if check pass, return true or false
+func (f *Bucket) checkSendCondition(
+	para *define.SendMsgPara,
+	conn IWSConn) bool {
+	//check
+	if para == nil || conn == nil {
+		return false
+	}
+	if para.ReceiverIds == nil &&
+		para.Tags == nil &&
+		para.Property == nil {
+		//not need condition check
+		return true
+	}
+
+	//check by receiver ids
+	if len(para.ReceiverIds) > 0 {
+		connOwnerId := conn.GetOwnerId()
+		if connOwnerId <= 0 {
+			return false
+		}
+		for _, receiverId := range para.ReceiverIds {
+			if receiverId == connOwnerId {
+				return true
+			}
+		}
+		return false
+	}
+
+	//check by tags
+	if len(para.Tags) > 0 {
+		connTags := conn.GetTags()
+		if connTags == nil || len(connTags) <= 0 {
+			return false
+		}
+		for _, tag := range para.Tags {
+			if v, ok := connTags[tag]; ok && v {
+				return true
+			}
+		}
+		return false
+	}
+
+	//check by property
+	if len(para.Property) > 0 {
+		connProp := conn.GetAllProp()
+		if connProp == nil || len(connProp) <= 0 {
+			return false
+		}
+		for k, v := range para.Property {
+			sv, ok := connProp[k]
+			if ok && sv == v {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
+
+//free run memory
+func (f *Bucket) freeRunMemory() {
+	//free memory
+	f.Lock()
+	defer f.Unlock()
+	f.connMap = map[int64]IWSConn{}
+	f.connRemoteMap = map[string]int64{}
+	runtime.GC()
+}
+
+//init read message ticker
+func (f *Bucket) initReadMsgTicker() {
+	//get connect read msg rate
+	readMsgRate := f.router.GetConf().ReadByteRate
+	if readMsgRate <= 0 {
+		readMsgRate = define.DefaultReadMsgTicker
+	}
+
+	//init read msg ticker
+	f.readMsgTicker = queue.NewTicker(readMsgRate)
+	f.readMsgTicker.SetCheckerCallback(f.cbForReadConnData)
+}
+
+//init send message queue and consumer
+func (f *Bucket) initSendMsgConsumer() {
+	//get send msg rate
+	sendMsgRate := f.router.GetConf().SendByteRate
+	if sendMsgRate <= 0 {
+		sendMsgRate = define.DefaultSendMsgTicker
+	}
+	f.sendMsgQueue = queue.NewList()
+	f.sendMsgQueue.SetConsumer(f.cbForConsumerSendData, sendMsgRate)
 }
 
 //inter init
 func (f *Bucket) interInit() {
-	//set cb for read connect data
-	f.worker.SetCBForBindObjTickerOpt(f.cbForReadConnData)
+	//init read msg ticker
+	f.initReadMsgTicker()
 
-	//create batch son workers
-	f.createSonWorkers()
+	//init send message queue
+	f.initSendMsgConsumer()
 }

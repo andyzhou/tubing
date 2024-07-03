@@ -14,7 +14,7 @@ import (
  * @author Andy Chow <diudiu8848@163.com>
  * websocket router
  * - one ws uri, one router
- * - one router, one manager
+ * - one manager, batch workers
  */
 
 type (
@@ -27,6 +27,7 @@ type (
 		Buckets          int
 		HeartByte        []byte
 		ReadByteRate	 float64 //read ws data rate
+		SendByteRate	 float64 //write ws data rate
 		CheckActiveRate  int //if 0 means not need check
 		MaxActiveSeconds int
 	}
@@ -35,7 +36,6 @@ type (
 //router info
 type Router struct {
 	rc          *RouterCfg //reference cfg
-	bucket 		*Bucket
 	connManager IConnManager
 	cd          ICoder
 	upGrader    websocket.Upgrader //ws up grader
@@ -88,18 +88,14 @@ func NewRouter(rc *RouterCfg) *Router {
 		cd:          NewCoder(),
 	}
 
-	//init bucket and manager
-	this.bucket = NewBucket(this)
+	//init manager
 	this.connManager = NewManager(this)
-
-	//setup manager
-	this.connManager.SetMessageType(rc.MsgType)
 	return this
 }
 
 //close
-func (f *Router) Close() {
-	f.connManager.Close()
+func (f *Router) Quit() {
+	f.connManager.Quit()
 }
 
 //set heart beat data
@@ -144,7 +140,7 @@ func (f *Router) SetCBForClosed(cb func(routerName string, connId int64, ctx ...
 		return
 	}
 	f.cbForClosed = cb
-	f.bucket.SetCBForConnClosed(cb)
+	f.GetManager().SetCBForConnClosed(cb)
 }
 
 //set cb func for read data
@@ -153,7 +149,7 @@ func (f *Router) SetCBForRead(cb func(routerName string, connId int64, messageTy
 		return
 	}
 	f.cbForRead = cb
-	f.bucket.SetCBForReadMessage(cb)
+	f.GetManager().SetCBForReadMessage(cb)
 }
 
 //get coder
@@ -169,6 +165,11 @@ func (f *Router) GetUriPara(name string, ctx *gin.Context) string {
 //get heart beat
 func (f *Router) GetHeartByte() []byte {
 	return f.rc.HeartByte
+}
+
+//get router config
+func (f *Router) GetRouterCfg() *RouterCfg {
+	return f.rc
 }
 
 //new connect entry
@@ -204,6 +205,11 @@ func (f *Router) Entry(ctx *gin.Context) {
 	}else{
 		newConnId = f.connManager.GenConnId()
 	}
+	if newConnId <= 0 {
+		err = errors.New("can't gen new connect id")
+		ctx.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
 
 	//accept new connect
 	_, subErr := f.connManager.Accept(newConnId, conn)
@@ -238,11 +244,6 @@ func (f *Router) Entry(ctx *gin.Context) {
 //get connect manager
 func (f *Router) GetManager() IConnManager {
 	return f.connManager
-}
-
-//get connect bucket
-func (f *Router) GetBucket() *Bucket {
-	return f.bucket
 }
 
 //get name

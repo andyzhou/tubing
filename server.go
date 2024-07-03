@@ -30,6 +30,8 @@ type UriRouter struct {
 	MsgType int
 	HeartByte []byte
 	BuffSize int //read and write buffer size
+	ReadByteRate float64 //if 0 will use default value
+	SendByteRate float64 //if 0 will use default value
 	CheckActiveRate int //if 0 means not need check
 	MaxActiveSeconds int
 
@@ -76,7 +78,7 @@ func (f *Server) Quit() {
 	sf := func(k, v interface{}) bool {
 		router, ok := v.(face.IRouter)
 		if ok && router != nil {
-			router.Close()
+			router.Quit()
 			f.routers.Delete(k)
 			atomic.AddInt32(&f.routerCount, -1)
 		}
@@ -113,7 +115,7 @@ func (f *Server) RemoveUriByName(name string) error {
 	uri, _ := f.GetUri(name)
 
 	//close
-	router.Close()
+	router.Quit()
 	f.routers.Delete(name)
 	if uri != "" {
 		f.routerUris.Delete(uri)
@@ -286,6 +288,7 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 		MsgType: ur.MsgType,
 		BufferSize: ur.BuffSize,
 		HeartByte: ur.HeartByte,
+		ReadByteRate: ur.ReadByteRate,
 		CheckActiveRate: ur.CheckActiveRate,
 		MaxActiveSeconds: ur.MaxActiveSeconds,
 	}
