@@ -166,70 +166,6 @@ func (f *Manager) GetBucket(id int) (IBucket, error) {
 	return v, nil
 }
 
-
-//send message
-func (f *Manager) SendMessage(
-	para *define.SendMsgPara) error {
-	var (
-		err error
-	)
-	//check
-	if para == nil || para.Msg == nil {
-		return errors.New("invalid parameter")
-	}
-
-	//send to all buckets
-	for _, v := range f.bucketMap {
-		err = v.SendMessage(para)
-	}
-	return err
-}
-
-////cast message
-//func (f *Manager) CastMessage(
-//	message []byte,
-//	tags ...string) error {
-//	var (
-//		err error
-//	)
-//	//check
-//	if message == nil || len(message) <= 0 {
-//		return errors.New("invalid parameter")
-//	}
-//
-//	//filter by tags first
-//	if tags != nil && len(tags) > 0 {
-//		//get matched connect ids
-//		connIds, _ := f.getConnIdsByTag(tags...)
-//		if connIds == nil || len(connIds) <= 0 {
-//			return errors.New("no any matched conn ids by tag")
-//		}
-//		//cast to matched connect ids
-//		for _, connId := range connIds {
-//			//get conn by id and write message
-//			conn, _ := f.GetConn(connId)
-//			if conn != nil {
-//				err = conn.Write(f.msgType, message)
-//			}
-//		}
-//		return err
-//	}
-//
-//	//cast message to all
-//	f.mapLock.Lock()
-//	defer f.mapLock.Unlock()
-//	log.Printf("manager.CastMessage, conns:%v\n", len(f.connMap))
-//	for _, v := range f.connMap {
-//		if &v == nil {
-//			continue
-//		}
-//		//write message
-//		log.Printf("manager.CastMessage, connId:%v\n", v.GetConnId())
-//		err = v.Write(f.msgType, message)
-//	}
-//	return err
-//}
-
 //get conn by id
 func (f *Manager) GetConn(
 	connId int64) (IWSConn, error) {
@@ -249,36 +185,22 @@ func (f *Manager) GetConn(
 	return wsConn, subErr
 }
 
-//accept new websocket connect
-func (f *Manager) Accept(
-	connId int64,
-	conn *websocket.Conn) (IWSConn, error) {
+//send message
+func (f *Manager) SendMessage(
+	para *define.SendMsgPara) error {
+	var (
+		err error
+	)
 	//check
-	if connId <= 0 || conn == nil {
-		return nil, errors.New("invalid parameter")
-	}
-	connRemoteAddr := conn.RemoteAddr().String()
-
-	//init new connect
-	wsConn := NewWSConn(conn, connId)
-	err := wsConn.SetRemoteAddr(connRemoteAddr)
-	if err != nil {
-		return nil, err
+	if para == nil || para.Msg == nil {
+		return errors.New("invalid parameter")
 	}
 
-	//pick target bucket by connect id
-	targetBucketId := int(connId % int64(f.buckets))
-	targetBucket, subErr := f.GetBucket(targetBucketId)
-	if subErr != nil || targetBucket == nil {
-		return nil, subErr
+	//send to all buckets
+	for _, v := range f.bucketMap {
+		err = v.SendMessage(para)
 	}
-
-	//add remote addr
-	f.remoteAddrMap[connRemoteAddr] = connId
-
-	//add new ws connect on target bucket
-	err = targetBucket.AddConnect(wsConn)
-	return wsConn, err
+	return err
 }
 
 //close conn with message
@@ -319,12 +241,46 @@ func (f *Manager) CloseWithMessage(
 	return nil
 }
 
+//accept new websocket connect
+func (f *Manager) Accept(
+	connId int64,
+	conn *websocket.Conn) (IWSConn, error) {
+	//check
+	if connId <= 0 || conn == nil {
+		return nil, errors.New("invalid parameter")
+	}
+	connRemoteAddr := conn.RemoteAddr().String()
+
+	//init new connect
+	wsConn := NewWSConn(conn, connId)
+	err := wsConn.SetRemoteAddr(connRemoteAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	//pick target bucket by connect id
+	targetBucketId := int(connId % int64(f.buckets))
+	targetBucket, subErr := f.GetBucket(targetBucketId)
+	if subErr != nil || targetBucket == nil {
+		return nil, subErr
+	}
+
+	//add remote addr
+	f.remoteAddrMap[connRemoteAddr] = connId
+
+	//add new ws connect on target bucket
+	err = targetBucket.AddConnect(wsConn)
+	return wsConn, err
+}
+
+//set cb for read messages
 func (f *Manager) SetCBForReadMessage(cb func(string, int64, int, []byte) error) {
 	for _, v := range f.bucketMap {
 		v.SetCBForReadMessage(cb)
 	}
 }
 
+//set cb for connect closed
 func (f *Manager) SetCBForConnClosed(cb func(string, int64, ...*gin.Context) error) {
 	for _, v := range f.bucketMap {
 		v.SetCBForConnClosed(cb)
