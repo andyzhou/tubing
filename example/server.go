@@ -72,7 +72,7 @@ func cbForConnected(
 	messageType := define.MessageTypeOfJson
 	message := []byte("welcome you!")
 	err = conn.Write(messageType, message)
-	//log.Printf("cbForConnected, connId:%v, send result:%v\n", connId, err)
+	log.Printf("cbForConnected, connId:%v, send result:%v\n", connId, err)
 	return nil
 }
 
