@@ -26,19 +26,15 @@ import (
 type Bucket struct {
 	//inter obj
 	bucketId int
+	msgType int //reference from router
 	router IRouter //reference from outside
 	readMsgTicker *queue.Ticker //ticker for read connect msg
 	sendMsgQueue *queue.List //inter queue for send message
-
-	activeTicker *queue.Ticker
-	msgType int //reference from router
-	heartRate int //heart beat rate
 
 	//run env data
 	connMap map[int64]IWSConn //connId -> IWSConn
 	connRemoteMap map[string]int64 //remoteAddr -> connId
 	connCount int64
-	activeSwitcher bool //used for check conn active or not
 
 	//cb func
 	cbForReadMessage func(string, int64, int, []byte) error
@@ -166,14 +162,16 @@ func (f *Bucket) CloseWithMessage(conn *websocket.Conn, message string) error {
 }
 
 //close connect
-func (f *Bucket) CloseConnect(connIds ...int64) error {
+//return map[connId]remoteAddr, error
+func (f *Bucket) CloseConnect(connIds ...int64) (map[int64]string, error) {
 	//check
 	if connIds == nil || len(connIds) <= 0 {
-		return errors.New("invalid parameter")
+		return nil, errors.New("invalid parameter")
 	}
 
 	//loop opt
 	succeed := 0
+	result := make(map[int64]string)
 	for _, connId := range connIds {
 		//load and update
 		conn, ok := f.connMap[connId]
@@ -188,6 +186,7 @@ func (f *Bucket) CloseConnect(connIds ...int64) error {
 		remoteAddr := conn.GetRemoteAddr()
 		if remoteAddr != "" {
 			delete(f.connRemoteMap, remoteAddr)
+			result[connId] = remoteAddr
 		}
 		delete(f.connMap, connId)
 		atomic.AddInt64(&f.connCount, -1)
@@ -202,7 +201,7 @@ func (f *Bucket) CloseConnect(connIds ...int64) error {
 		runtime.GC()
 		log.Printf("tubing.server.manager.CloseConn, gc opt\n")
 	}
-	return nil
+	return result, nil
 }
 
 //add new connect
@@ -237,7 +236,7 @@ func (f *Bucket) closeConnect(conn IWSConn) error {
 	}
 
 	//close ws connect
-	conn.Close()
+	defer conn.Close()
 
 	//remove from run env
 	remoteAddr := conn.GetRemoteAddr()

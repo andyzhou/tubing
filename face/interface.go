@@ -41,6 +41,8 @@ type IConnManager interface {
 	GetBucket(id int) (IBucket, error)
 
 	CloseWithMessage(conn *websocket.Conn, message string) error
+	CloseConnect(connIds ...int64) error
+
 	GetConn(connId int64) (IWSConn, error)
 	Accept(connId int64, conn *websocket.Conn) (IWSConn, error)
 	GenConnId() int64
@@ -61,7 +63,7 @@ type IBucket interface {
 	//opt for connect
 	GetAllConnect() map[int64]IWSConn
 	GetConnect(connId int64) (IWSConn, error)
-	CloseConnect(connIds ...int64) error
+	CloseConnect(connIds ...int64) (map[int64]string, error)
 	AddConnect(conn IWSConn) error
 
 	//opt for cb func

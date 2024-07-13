@@ -241,6 +241,38 @@ func (f *Manager) CloseWithMessage(
 	return nil
 }
 
+//close conn by ids
+func (f *Manager) CloseConnect(connIds ...int64) error {
+	var (
+		targetBucket IBucket
+		err error
+	)
+	//check
+	if connIds == nil || len(connIds) <= 0 {
+		return errors.New("invalid parameter")
+	}
+
+	//close one by one
+	for _, connId := range connIds {
+		//get target bucket by connect id
+		targetBucketId := int(connId % int64(f.buckets))
+		if targetBucketId < 0 {
+			continue
+		}
+		targetBucket, err = f.GetBucket(targetBucketId)
+		if err != nil || targetBucket == nil {
+			continue
+		}
+		remoteAddrMap, _ := targetBucket.CloseConnect(connId)
+		if remoteAddrMap != nil {
+			for _, addr := range remoteAddrMap {
+				delete(f.remoteAddrMap, addr)
+			}
+		}
+	}
+	return nil
+}
+
 //accept new websocket connect
 func (f *Manager) Accept(
 	connId int64,
