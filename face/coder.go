@@ -30,10 +30,13 @@ func (f *Coder) Marshal(contentType int, content proto.Message) ([]byte, error) 
 	switch contentType {
 	case define.MessageTypeOfJson:
 		data, err = f.marshalJson(content)
+		break
 	case define.MessageTypeOfOctet:
 		data, err = f.marshalProto(content)
+		break
 	default:
 		err = fmt.Errorf("Decoder:Marshal, unsupported content type:%v", contentType)
+		break
 	}
 	return data, err
 }
@@ -46,10 +49,13 @@ func (f *Coder) Unmarshal(contentType int, content []byte, req proto.Message) er
 	switch contentType {
 	case define.MessageTypeOfJson:
 		err = f.unmarshalJson(content, req)
+		break
 	case define.MessageTypeOfOctet:
 		err = f.unmarshalProto(content, req)
+		break
 	default:
 		err = fmt.Errorf("Coder:Unmarshal, unsupported content type:%v", contentType)
+		break
 	}
 	return err
 }
