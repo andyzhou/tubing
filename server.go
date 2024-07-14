@@ -28,10 +28,8 @@ type UriRouter struct {
 	RouterName string
 	RouterUri string
 	MsgType int
-	HeartByte []byte
 	BuffSize int //read and write buffer size
 	ReadByteRate float64 //if 0 will use default value
-	SendByteRate float64 //if 0 will use default value
 	CheckActiveRate int //if 0 means not need check
 	MaxActiveSeconds int
 
@@ -287,7 +285,6 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 		Uri: ur.RouterUri,
 		MsgType: ur.MsgType,
 		BufferSize: ur.BuffSize,
-		HeartByte: ur.HeartByte,
 		ReadByteRate: ur.ReadByteRate,
 		CheckActiveRate: ur.CheckActiveRate,
 		MaxActiveSeconds: ur.MaxActiveSeconds,
@@ -296,10 +293,7 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 	//init new router
 	router := face.NewRouter(rc)
 
-	//setup relate key data and callbacks
-	if ur.HeartByte != nil {
-		router.SetHeartByte(ur.HeartByte)
-	}
+	//setup key data
 	if ur.MsgType > 0 {
 		router.SetMessageType(ur.MsgType)
 	}

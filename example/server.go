@@ -236,7 +236,6 @@ func startApp(c *cli.Context) error {
 		RouterName: RouterName,
 		RouterUri: RouterUri,
 		MsgType: define.MessageTypeOfJson,
-		HeartByte: []byte(define.MessageBodyOfHeartBeat),
 		CheckActiveRate: 2, //2 seconds
 		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,
