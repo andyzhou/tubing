@@ -28,6 +28,7 @@ type Bucket struct {
 	bucketId int
 	msgType int //reference from router
 	router IRouter //reference from outside
+	activeCheckTicker *queue.Ticker //ticker for check active connect
 	readMsgTicker *queue.Ticker //ticker for read connect msg
 	sendMsgQueue *queue.List //inter queue for send message
 
@@ -59,6 +60,9 @@ func (f *Bucket) Quit() {
 	//close inter ticker
 	if f.readMsgTicker != nil {
 		f.readMsgTicker.Quit()
+	}
+	if f.activeCheckTicker != nil {
+		f.activeCheckTicker.Quit()
 	}
 
 	//free memory
@@ -239,6 +243,8 @@ func (f *Bucket) closeConnect(conn IWSConn) error {
 	defer conn.Close()
 
 	//remove from run env
+	f.Lock()
+	defer f.Unlock()
 	remoteAddr := conn.GetRemoteAddr()
 	if remoteAddr != "" {
 		delete(f.connRemoteMap, remoteAddr)
@@ -414,6 +420,24 @@ func (f *Bucket) freeRunMemory() {
 	runtime.GC()
 }
 
+//cb for active connect check
+func (f *Bucket) cbForCheckActiveConn() error {
+	succeed := 0
+	for _, conn := range f.connMap {
+		isActive := conn.ConnIsActive()
+		if !isActive {
+			//force close connect
+			f.closeConnect(conn)
+			succeed++
+		}
+	}
+	//force gc
+	if succeed > 0 {
+		runtime.GC()
+	}
+	return nil
+}
+
 //init read message ticker
 func (f *Bucket) initReadMsgTicker() {
 	//get connect read msg rate
@@ -438,6 +462,20 @@ func (f *Bucket) initSendMsgConsumer() {
 	f.sendMsgQueue.SetConsumer(f.cbForConsumerSendData, sendMsgRate)
 }
 
+//init active conn check ticker
+func (f *Bucket) initActiveConnCheckTicker() {
+	//check active rate from config
+	activeCheckRate := f.router.GetConf().CheckActiveRate
+	if activeCheckRate <= 0 {
+		//not need check, do nothing
+		return
+	}
+
+	//init ticker
+	f.activeCheckTicker = queue.NewTicker(float64(activeCheckRate))
+	f.activeCheckTicker.SetCheckerCallback(f.cbForCheckActiveConn)
+}
+
 //inter init
 func (f *Bucket) interInit() {
 	//init read msg ticker
@@ -445,4 +483,7 @@ func (f *Bucket) interInit() {
 
 	//init send message queue
 	f.initSendMsgConsumer()
+
+	//init active conn check ticker
+	f.initActiveConnCheckTicker()
 }

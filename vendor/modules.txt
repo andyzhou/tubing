@@ -1,4 +1,4 @@
-# github.com/andyzhou/tinylib v0.0.0-20240703022329-951a78a9b059
+# github.com/andyzhou/tinylib v0.0.0-20241002123948-d2b6b7ea44ba
 ## explicit; go 1.19
 github.com/andyzhou/tinylib/queue
 github.com/andyzhou/tinylib/util

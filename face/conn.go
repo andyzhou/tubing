@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
+	"log"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -252,17 +253,14 @@ func (f *WSConn) CloseWithMessage(message string) error {
 }
 func (f *WSConn) Close() error {
 	//close with locker
-	//f.connLock.Lock()
-	//defer f.connLock.Unlock()
 	err := f.conn.Close()
 	if err != nil {
-		return err
+		log.Printf("conn.Close failed, connId:%v, err:%v\n", f.connId, err.Error())
 	}
 
 	//release memory
 	f.propMap = map[string]interface{}{}
 	f.tagMap = map[string]bool{}
 	runtime.GC()
-
 	return nil
 }

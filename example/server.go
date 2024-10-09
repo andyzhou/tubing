@@ -77,7 +77,10 @@ func cbForConnected(
 }
 
 //cb for ws close connect
-func cbForClosed(routerName string, connId int64, ctx ... *gin.Context) error {
+func cbForClosed(
+	routerName string,
+	connId int64,
+	ctx ... *gin.Context) error {
 	log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }

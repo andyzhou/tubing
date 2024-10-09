@@ -13,7 +13,7 @@ const (
 	DefaultReadMsgTicker = 0.1 //xx seconds
 	DefaultSendMsgTicker = 0.1 //xx seconds
 	DefaultDialTimeOut = 5 //xx seconds
-	DefaultHeartBeatRate = 60 //xx seconds
+	DefaultHeartBeatRate = 120 //xx seconds
 	DefaultBuckets = 5 //xx buckets
 	DefaultWorkers = 5 //xx workers for one bucket
 	DefaultReadDataRate = float64(0.2)

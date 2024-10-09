@@ -3,7 +3,7 @@ module github.com/andyzhou/tubing
 go 1.18
 
 require (
-	github.com/andyzhou/tinylib v0.0.0-20240703022329-951a78a9b059
+	github.com/andyzhou/tinylib v0.0.0-20241002123948-d2b6b7ea44ba
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gorilla/websocket v1.4.2
 	github.com/urfave/cli v1.22.5
