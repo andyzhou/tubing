@@ -259,7 +259,7 @@ func startApp(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("start %v done..\n", c.App.Name)
+	log.Printf("start %v on port %v done..\n", c.App.Name, ServerPort)
 	wg.Wait()
 	return nil
 }

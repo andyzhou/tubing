@@ -122,7 +122,8 @@ function chat_server_message(message) {
         //scroll to div bottom
         console.log("chat_server_message, msg:"+message);
         var logDiv = $("#log");
-        logDiv.scrollTop(logDiv[0].scrollHeight);
+       // logDiv.scrollTop(logDiv[0].scrollHeight);
+       logDiv.animate({"scrollTop":logDiv[0].scrollHeight}, "slow");
     }, delayRate);
 }
 

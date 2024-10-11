@@ -170,9 +170,7 @@ func (f *WebSocketClient) GetClients() int {
 
 //create new c2s client
 //client connect the target server
-func (f *WebSocketClient) CreateClient(
-				connPara *WebSocketConnPara,
-			) (*OneWSClient, error) {
+func (f *WebSocketClient) CreateClient(connPara *WebSocketConnPara) (*OneWSClient, error) {
 	//init new websocket client
 	wsc := newOneWSClient(connPara, f.messageType)
 
@@ -314,10 +312,7 @@ func (f *WebSocketClient) interInit() {
 //api for oneWSClient
 /////////////////////
 
-func newOneWSClient(
-			connPara *WebSocketConnPara,
-			msgType int,
-		) *OneWSClient {
+func newOneWSClient(connPara *WebSocketConnPara, msgType int) *OneWSClient {
 	//self init
 	this := &OneWSClient{
 		connPara: *connPara,

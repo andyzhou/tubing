@@ -30,7 +30,7 @@ type Bucket struct {
 	router IRouter //reference from outside
 	activeCheckTicker *queue.Ticker //ticker for check active connect
 	readMsgTicker *queue.Ticker //ticker for read connect msg
-	sendMsgQueue *queue.List //inter queue for send message
+	sendMsgQueue *queue.List //inter queue list for send message
 
 	//run env data
 	connMap map[int64]IWSConn //connId -> IWSConn
@@ -256,6 +256,7 @@ func (f *Bucket) closeConnect(conn IWSConn) error {
 }
 
 //cb for read connect data
+//this will reduce tcp read resource cost
 func (f *Bucket) cbForReadConnData() error {
 	var (
 		messageType int
@@ -351,9 +352,7 @@ func (f *Bucket) cbForConsumerSendData(data interface{}) error {
 
 //check send condition
 //if check pass, return true or false
-func (f *Bucket) checkSendCondition(
-	para *define.SendMsgPara,
-	conn IWSConn) bool {
+func (f *Bucket) checkSendCondition(para *define.SendMsgPara, conn IWSConn) bool {
 	//check
 	if para == nil || conn == nil {
 		return false

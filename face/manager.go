@@ -238,6 +238,12 @@ func (f *Manager) CloseWithMessage(
 
 	//delete remote addr
 	delete(f.remoteAddrMap, remoteAddr)
+
+	//gc opt
+	if len(f.remoteAddrMap) <= 0 {
+		f.remoteAddrMap = map[string]int64{}
+		runtime.GC()
+	}
 	return nil
 }
 
@@ -253,6 +259,7 @@ func (f *Manager) CloseConnect(connIds ...int64) error {
 	}
 
 	//close one by one
+	gcOpt := false
 	for _, connId := range connIds {
 		//get target bucket by connect id
 		targetBucketId := int(connId % int64(f.buckets))
@@ -268,15 +275,22 @@ func (f *Manager) CloseConnect(connIds ...int64) error {
 			for _, addr := range remoteAddrMap {
 				delete(f.remoteAddrMap, addr)
 			}
+			gcOpt = true
 		}
+	}
+
+	//memory gc opt
+	if gcOpt {
+		if len(f.remoteAddrMap) <= 0 {
+			f.remoteAddrMap = map[string]int64{}
+		}
+		runtime.GC()
 	}
 	return nil
 }
 
 //accept new websocket connect
-func (f *Manager) Accept(
-	connId int64,
-	conn *websocket.Conn) (IWSConn, error) {
+func (f *Manager) Accept(connId int64, conn *websocket.Conn) (IWSConn, error) {
 	//check
 	if connId <= 0 || conn == nil {
 		return nil, errors.New("invalid parameter")
@@ -458,11 +472,4 @@ func (f *Manager) interInit() {
 		bucket := NewBucket(i, f.router)
 		f.bucketMap[i] = bucket
 	}
-
-	//activeCheckRate := f.router.GetConf().CheckActiveRate
-	//if activeCheckRate > 0 {
-	//	f.activeTicker = queue.NewTicker(float64(activeCheckRate))
-	//	f.activeTicker.SetTag("manager")
-	//	f.activeTicker.SetCheckerCallback(f.cbForActiveCheck)
-	//}
 }

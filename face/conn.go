@@ -81,6 +81,11 @@ func (f *WSConn) RemoveTags(tags ...string) error {
 	for _, tag := range tags {
 		delete(f.tagMap, tag)
 	}
+
+	//gc opt
+	if len(f.tagMap) <= 0 {
+		runtime.GC()
+	}
 	return nil
 }
 
@@ -171,6 +176,11 @@ func (f *WSConn) DelProp(key string) error {
 	f.propLock.Lock()
 	defer f.propLock.Unlock()
 	delete(f.propMap, key)
+
+	//gc opt
+	if len(f.propMap) <= 0 {
+		runtime.GC()
+	}
 	return nil
 }
 
@@ -261,6 +271,8 @@ func (f *WSConn) Close() error {
 	//release memory
 	f.propMap = map[string]interface{}{}
 	f.tagMap = map[string]bool{}
+
+	//gc opt
 	runtime.GC()
 	return nil
 }
