@@ -3,6 +3,7 @@ package face
 import (
 	"errors"
 	"github.com/andyzhou/tubing/define"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"runtime"
 	"sync"
@@ -289,7 +290,7 @@ func (f *Manager) CloseConnect(connIds ...int64) error {
 }
 
 //accept new websocket connect
-func (f *Manager) Accept(connId int64, conn *websocket.Conn) (IWSConn, error) {
+func (f *Manager) Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (IWSConn, error) {
 	//check
 	if connId <= 0 || conn == nil {
 		return nil, errors.New("invalid parameter")
@@ -297,7 +298,7 @@ func (f *Manager) Accept(connId int64, conn *websocket.Conn) (IWSConn, error) {
 	connRemoteAddr := conn.RemoteAddr().String()
 
 	//init new connect
-	wsConn := NewWSConn(conn, connId)
+	wsConn := NewWSConn(conn, connId, ctx)
 	err := wsConn.SetRemoteAddr(connRemoteAddr)
 	if err != nil {
 		return nil, err
@@ -319,14 +320,14 @@ func (f *Manager) Accept(connId int64, conn *websocket.Conn) (IWSConn, error) {
 }
 
 //set cb for read messages
-func (f *Manager) SetCBForReadMessage(cb func(string, int64, int, []byte) error) {
+func (f *Manager) SetCBForReadMessage(cb func(string, int64, int, []byte, *gin.Context) error) {
 	for _, v := range f.bucketMap {
 		v.SetCBForReadMessage(cb)
 	}
 }
 
 //set cb for connect closed
-func (f *Manager) SetCBForConnClosed(cb func(string, int64) error) {
+func (f *Manager) SetCBForConnClosed(cb func(string, int64, *gin.Context) error) {
 	for _, v := range f.bucketMap {
 		v.SetCBForConnClosed(cb)
 	}

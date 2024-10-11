@@ -3,6 +3,7 @@ package face
 import (
 	"errors"
 	"github.com/andyzhou/tubing/define"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"log"
 	"runtime"
@@ -21,6 +22,7 @@ import (
 type WSConn struct {
 	connId int64 //connect id
 	ownerId int64
+	ctx *gin.Context //reference
 	conn *websocket.Conn //reference
 	propMap map[string]interface{}
 	tagMap map[string]bool
@@ -32,10 +34,11 @@ type WSConn struct {
 }
 
 //construct
-func NewWSConn(conn *websocket.Conn, connId int64) *WSConn {
+func NewWSConn(conn *websocket.Conn, connId int64, ctx *gin.Context) *WSConn {
 	this := &WSConn{
 		connId: connId,
 		conn: conn,
+		ctx: ctx,
 		propMap: map[string]interface{}{},
 		tagMap: map[string]bool{},
 	}
@@ -45,6 +48,11 @@ func NewWSConn(conn *websocket.Conn, connId int64) *WSConn {
 //get connect id
 func (f *WSConn) GetConnId() int64 {
 	return f.connId
+}
+
+//get gin context
+func (f *WSConn) GetContext() *gin.Context {
+	return f.ctx
 }
 
 //get remote addr

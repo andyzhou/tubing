@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"github.com/andyzhou/tubing/define"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"log"
 	"runtime"
@@ -37,8 +38,8 @@ type Bucket struct {
 	connCount int64
 
 	//cb func
-	cbForReadMessage func(string, int64, int, []byte) error
-	cbForConnClosed func(string, int64) error
+	cbForReadMessage func(string, int64, int, []byte, *gin.Context) error
+	cbForConnClosed func(string, int64, *gin.Context) error
 	sync.RWMutex
 }
 
@@ -74,7 +75,7 @@ func (f *Bucket) Quit() {
 
 //set cb for read message, step-1-1
 //cb func(routeName, connectId, msgType, msgData) error
-func (f *Bucket) SetCBForReadMessage(cb func(string, int64, int, []byte) error)  {
+func (f *Bucket) SetCBForReadMessage(cb func(string, int64, int, []byte, *gin.Context) error)  {
 	if cb == nil {
 		return
 	}
@@ -82,7 +83,7 @@ func (f *Bucket) SetCBForReadMessage(cb func(string, int64, int, []byte) error) 
 }
 
 //set cb for conn closed, step-1-2
-func (f *Bucket) SetCBForConnClosed(cb func(string, int64) error) {
+func (f *Bucket) SetCBForConnClosed(cb func(string, int64, *gin.Context) error) {
 	if cb == nil {
 		return
 	}
@@ -287,7 +288,7 @@ func (f *Bucket) cbForReadConnData() error {
 
 			//check and call closed cb
 			if f.cbForConnClosed != nil {
-				f.cbForConnClosed(f.router.GetName(), connId)
+				f.cbForConnClosed(f.router.GetName(), connId, connObj.GetContext())
 			}
 
 			//remove from bucket
@@ -303,7 +304,7 @@ func (f *Bucket) cbForReadConnData() error {
 
 		//check and call read message cb
 		if f.cbForReadMessage != nil {
-			f.cbForReadMessage(f.router.GetName(), connId, messageType, message)
+			f.cbForReadMessage(f.router.GetName(), connId, messageType, message, connObj.GetContext())
 		}
 	}
 

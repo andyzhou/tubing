@@ -79,7 +79,8 @@ func cbForConnected(
 //cb for ws close connect
 func cbForClosed(
 	routerName string,
-	connId int64) error {
+	connId int64,
+	ctx *gin.Context) error {
 	log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
@@ -89,7 +90,8 @@ func cbForRead(
 	routerName string,
 	connId int64,
 	messageType int,
-	message []byte) error {
+	message []byte,
+	ctx *gin.Context) error {
 	if tb == nil {
 		return errors.New("tb not init yet")
 	}

@@ -44,12 +44,12 @@ type IConnManager interface {
 	CloseConnect(connIds ...int64) error
 
 	GetConn(connId int64) (IWSConn, error)
-	Accept(connId int64, conn *websocket.Conn) (IWSConn, error)
+	Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (IWSConn, error)
 	GenConnId() int64
 
 	//cb opt
-	SetCBForReadMessage(cb func(string, int64, int, []byte) error)
-	SetCBForConnClosed(cb func(string, int64) error)
+	SetCBForReadMessage(cb func(string, int64, int, []byte, *gin.Context) error)
+	SetCBForConnClosed(cb func(string, int64, *gin.Context) error)
 }
 
 //interface of bucket
@@ -67,8 +67,8 @@ type IBucket interface {
 	AddConnect(conn IWSConn) error
 
 	//opt for cb func
-	SetCBForReadMessage(cb func(string, int64, int, []byte) error)
-	SetCBForConnClosed(cb func(string, int64) error)
+	SetCBForReadMessage(cb func(string, int64, int, []byte, *gin.Context) error)
+	SetCBForConnClosed(cb func(string, int64, *gin.Context) error)
 	SetMsgType(msgType int)
 }
 
@@ -76,6 +76,7 @@ type IBucket interface {
 type IWSConn interface {
 	//adv
 	GetConnId() int64
+	GetContext() *gin.Context
 	GetRemoteAddr() string
 	ConnIsActive(checkRates ...int) bool
 
