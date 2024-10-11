@@ -6,6 +6,7 @@ import (
 	"github.com/andyzhou/tubing/define"
 	"github.com/andyzhou/tubing/face"
 	"github.com/gin-gonic/gin"
+	"net/url"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -91,6 +92,38 @@ func (f *Server) Quit() {
 
 	//memory gc
 	runtime.GC()
+}
+
+//get request para
+func (f *Server) GetPara(name string, c *gin.Context, needDecode ...bool) string {
+	var (
+		queryPath string
+	)
+
+	//get query path
+	queryPath = c.Request.URL.RawQuery
+	if needDecode != nil && len(needDecode) > 0 {
+		if needDecode[0] {
+			queryPath, _ = url.PathUnescape(queryPath)
+		}
+	}
+	values, _ := url.ParseQuery(queryPath)
+
+	//get act from url
+	if values != nil {
+		paraVal := values.Get(name)
+		if paraVal != "" {
+			return paraVal
+		}
+	}
+
+	//get act from query, post.
+	paraVal := c.Query(name)
+	if paraVal == "" {
+		//get from post
+		paraVal = c.PostForm(name)
+	}
+	return paraVal
 }
 
 //remove one url by name

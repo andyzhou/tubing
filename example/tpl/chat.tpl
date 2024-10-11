@@ -29,7 +29,7 @@
 </div>
 
 <script type="text/javascript">
-var chatServerAddr = "localhost:8090/ws";
+var chatServerAddr = "localhost:8090/ws?name=test&age=30";
 var chatServerChannel = "test";
 
 //set user id

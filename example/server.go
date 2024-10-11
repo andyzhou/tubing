@@ -52,8 +52,8 @@ func cbForConnected(
 	//log.Printf("cbForConnected, connId:%v\n", connId)
 
 	//get para
-	//paras := ctx.Params
-	//log.Printf("cbForConnected, paras:%v\n", paras)
+	namePara := tubing.GetServer().GetPara("name", ctx)
+	log.Printf("cbForConnected, namePara:%v\n", namePara)
 
 	//get router
 	router, err := getRouterByName(routerName)
@@ -68,6 +68,7 @@ func cbForConnected(
 	conn, subErr := router.GetManager().GetConn(connId)
 	if subErr != nil || conn == nil {
 		log.Printf("cbForConnected, connId:%v, get conn failed, err:%v\n", connId, subErr)
+		return subErr
 	}
 	messageType := define.MessageTypeOfJson
 	message := []byte("welcome you!")
