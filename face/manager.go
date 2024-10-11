@@ -3,7 +3,6 @@ package face
 import (
 	"errors"
 	"github.com/andyzhou/tubing/define"
-	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"runtime"
 	"sync"
@@ -327,7 +326,7 @@ func (f *Manager) SetCBForReadMessage(cb func(string, int64, int, []byte) error)
 }
 
 //set cb for connect closed
-func (f *Manager) SetCBForConnClosed(cb func(string, int64, ...*gin.Context) error) {
+func (f *Manager) SetCBForConnClosed(cb func(string, int64) error) {
 	for _, v := range f.bucketMap {
 		v.SetCBForConnClosed(cb)
 	}

@@ -36,7 +36,7 @@ type UriRouter struct {
 	//relate cb func
 	CBForGenConnId func() int64
 	CBForConnected func(routerName string, connId int64, ctx *gin.Context) error
-	CBForClosed func(routerName string, connId int64, ctx ...*gin.Context) error
+	CBForClosed func(routerName string, connId int64) error
 	CBForRead func(routerName string, connId int64, messageType int, message []byte) error
 }
 

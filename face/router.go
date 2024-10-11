@@ -43,7 +43,7 @@ type Router struct {
 	//cb func
 	cbForGenConnId func() int64
 	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
-	cbForClosed    func(routerName string, connId int64, ctx... *gin.Context) error
+	cbForClosed    func(routerName string, connId int64) error
 	cbForRead      func(routerName string, connId int64, messageType int, message []byte) error
 }
 
@@ -135,7 +135,7 @@ func (f *Router) SetCBForConnected(cb func(routerName string, connId int64, ctx 
 }
 
 //set cb func for conn closed
-func (f *Router) SetCBForClosed(cb func(routerName string, connId int64, ctx ...*gin.Context) error) {
+func (f *Router) SetCBForClosed(cb func(routerName string, connId int64) error) {
 	if cb == nil {
 		return
 	}
@@ -221,7 +221,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 			log.Printf("Router:Entry, manager closed failed, err:%v\n", err.Error())
 		}
 		if f.cbForClosed != nil {
-			f.cbForClosed(f.rc.Name, newConnId, ctx)
+			f.cbForClosed(f.rc.Name, newConnId)
 		}
 		return
 	}
@@ -234,7 +234,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 			//call cb connected failed, force close connect
 			f.connManager.CloseWithMessage(conn, err.Error())
 			if f.cbForClosed != nil {
-				f.cbForClosed(f.rc.Name, newConnId, ctx)
+				f.cbForClosed(f.rc.Name, newConnId)
 			}
 			return
 		}

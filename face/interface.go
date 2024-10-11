@@ -49,7 +49,7 @@ type IConnManager interface {
 
 	//cb opt
 	SetCBForReadMessage(cb func(string, int64, int, []byte) error)
-	SetCBForConnClosed(cb func(string, int64, ...*gin.Context) error)
+	SetCBForConnClosed(cb func(string, int64) error)
 }
 
 //interface of bucket
@@ -68,7 +68,7 @@ type IBucket interface {
 
 	//opt for cb func
 	SetCBForReadMessage(cb func(string, int64, int, []byte) error)
-	SetCBForConnClosed(cb func(string, int64, ...*gin.Context) error)
+	SetCBForConnClosed(cb func(string, int64) error)
 	SetMsgType(msgType int)
 }
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"github.com/andyzhou/tubing/define"
-	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"log"
 	"runtime"
@@ -39,7 +38,7 @@ type Bucket struct {
 
 	//cb func
 	cbForReadMessage func(string, int64, int, []byte) error
-	cbForConnClosed func(string, int64, ...*gin.Context) error
+	cbForConnClosed func(string, int64) error
 	sync.RWMutex
 }
 
@@ -83,7 +82,7 @@ func (f *Bucket) SetCBForReadMessage(cb func(string, int64, int, []byte) error) 
 }
 
 //set cb for conn closed, step-1-2
-func (f *Bucket) SetCBForConnClosed(cb func(string, int64, ...*gin.Context) error) {
+func (f *Bucket) SetCBForConnClosed(cb func(string, int64) error) {
 	if cb == nil {
 		return
 	}
