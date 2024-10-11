@@ -8,6 +8,7 @@ type (
 		Msg []byte
 
 		//filter condition
+		ConnIds []int64
 		ReceiverIds []int64
 		Tags []string
 		Property map[string]interface{}
