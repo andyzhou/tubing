@@ -364,14 +364,14 @@ func (f *Bucket) checkSendCondition(para *define.SendMsgPara, conn IWSConn) bool
 		return true
 	}
 
-	//check by receiver ids
+	//check by receiver connect ids
 	if len(para.ReceiverIds) > 0 {
-		connOwnerId := conn.GetOwnerId()
-		if connOwnerId <= 0 {
+		connectId := conn.GetConnId()
+		if connectId <= 0 {
 			return false
 		}
-		for _, receiverId := range para.ReceiverIds {
-			if receiverId == connOwnerId {
+		for _, receiverConnId := range para.ReceiverIds {
+			if receiverConnId == connectId {
 				return true
 			}
 		}
