@@ -21,6 +21,7 @@ import (
 const (
 	RouterName = "test"
 	RouterUri  = "/ws"
+	Buckets = 3
 	ServerPort = 8090
 )
 
@@ -240,6 +241,7 @@ func startApp(c *cli.Context) error {
 	ur := &tubing.UriRouter{
 		RouterName: RouterName,
 		RouterUri: RouterUri,
+		Buckets: Buckets,
 		MsgType: define.MessageTypeOfJson,
 		CheckActiveRate: 2, //2 seconds
 		CBForConnected: cbForConnected,

@@ -29,6 +29,7 @@ type UriRouter struct {
 	RouterName string
 	RouterUri string
 	MsgType int
+	Buckets int //inter buckets size
 	BuffSize int //read and write buffer size
 	ReadByteRate float64 //if 0 will use default value
 	CheckActiveRate int //if 0 means not need check
@@ -317,6 +318,7 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 		Name: ur.RouterName,
 		Uri: ur.RouterUri,
 		MsgType: ur.MsgType,
+		Buckets: ur.Buckets,
 		BufferSize: ur.BuffSize,
 		ReadByteRate: ur.ReadByteRate,
 		CheckActiveRate: ur.CheckActiveRate,

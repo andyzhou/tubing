@@ -27,6 +27,7 @@ type Manager struct {
 	msgType int //reference from router
 	connectId int64 //atom connect id
 	locker sync.RWMutex
+	sync.RWMutex
 }
 
 //construct
@@ -237,6 +238,8 @@ func (f *Manager) CloseWithMessage(
 	targetBucket.CloseConnect(connId)
 
 	//delete remote addr
+	f.Lock()
+	defer f.Unlock()
 	delete(f.remoteAddrMap, remoteAddr)
 
 	//gc opt
@@ -312,6 +315,8 @@ func (f *Manager) Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (
 	}
 
 	//add remote addr
+	f.Lock()
+	defer f.Unlock()
 	f.remoteAddrMap[connRemoteAddr] = connId
 
 	//add new ws connect on target bucket
@@ -452,8 +457,8 @@ func (f *Manager) getConnIdByRemoteAddr(remoteAddr string) (int64, error) {
 	if remoteAddr == "" {
 		return 0, errors.New("invalid parameter")
 	}
-	f.locker.Lock()
-	defer f.locker.Unlock()
+	f.Lock()
+	defer f.Unlock()
 	v, _ := f.remoteAddrMap[remoteAddr]
 	return v, nil
 }
