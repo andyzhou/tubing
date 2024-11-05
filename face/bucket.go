@@ -330,6 +330,12 @@ func (f *Bucket) cbForConsumerSendData(data interface{}) error {
 		return errors.New("invalid parameter")
 	}
 
+	//send by connect ids
+	if sendPara.ConnIds != nil && len(sendPara.ConnIds) > 0 {
+		err = f.sendMessageByConnIds(sendPara.Msg, sendPara.ConnIds...)
+		return err
+	}
+
 	//loop send
 	for _, v := range f.connMap {
 		//check
@@ -350,6 +356,32 @@ func (f *Bucket) cbForConsumerSendData(data interface{}) error {
 	return err
 }
 
+//send message by connect ids
+func (f *Bucket) sendMessageByConnIds(msg []byte, connIds ...int64) error {
+	var (
+		err error
+	)
+	//check
+	if msg == nil || connIds == nil || len(connIds) <= 0 {
+		return errors.New("invalid parameter")
+	}
+
+	//send with locker
+	f.Lock()
+	defer f.Unlock()
+	for _, connId := range connIds {
+		if v, isOk := f.connMap[connId]; isOk && v != nil {
+			//send message to target connect
+			err = v.Write(f.msgType, msg)
+			if err != nil {
+				log.Printf("bucket.sendMessageByConnIds, send to connect id %v failed, err:%v\n",
+					connId, err.Error())
+			}
+		}
+	}
+	return err
+}
+
 //check send condition
 //if check pass, return true or false
 func (f *Bucket) checkSendCondition(para *define.SendMsgPara, conn IWSConn) bool {
@@ -357,30 +389,10 @@ func (f *Bucket) checkSendCondition(para *define.SendMsgPara, conn IWSConn) bool
 	if para == nil || conn == nil {
 		return false
 	}
-	if para.ConnIds == nil &&
-		para.ReceiverIds == nil &&
-		para.Tags == nil &&
-		para.Property == nil {
-		//not need condition check
-		return true
-	}
-
-	//check by connect ids
-	if len(para.ConnIds) > 0 {
-		connectId := conn.GetConnId()
-		if connectId <= 0 {
-			return false
-		}
-		for _, receiverConnId := range para.ConnIds {
-			if receiverConnId == connectId {
-				return true
-			}
-		}
-		return false
-	}
 
 	//check by receiver ids
-	if len(para.ReceiverIds) > 0 {
+	if para.ReceiverIds != nil && len(para.ReceiverIds) > 0 {
+		//get conn owner id
 		connOwnerId := conn.GetOwnerId()
 		if connOwnerId <= 0 {
 			return false
@@ -394,7 +406,7 @@ func (f *Bucket) checkSendCondition(para *define.SendMsgPara, conn IWSConn) bool
 	}
 
 	//check by tags
-	if len(para.Tags) > 0 {
+	if para.Tags != nil && len(para.Tags) > 0 {
 		connTags := conn.GetTags()
 		if connTags == nil || len(connTags) <= 0 {
 			return false
@@ -421,6 +433,8 @@ func (f *Bucket) checkSendCondition(para *define.SendMsgPara, conn IWSConn) bool
 		}
 		return false
 	}
+
+	//no any condition filter, return true
 	return true
 }
 
