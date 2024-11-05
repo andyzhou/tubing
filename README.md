@@ -1,6 +1,10 @@
 # tubing
 tubing is a http web socket proxy library, base one gin.
 
+# base rule
+- create base ws router
+- mark different conn property for diff application
+
 # code introduce
 - server.go
   - used for server side
