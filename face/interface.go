@@ -13,6 +13,7 @@ import (
  */
 
 //interface of router
+//one route uri, one router
 type IRouter interface {
 	Quit()
 	Entry(c *gin.Context)
@@ -32,14 +33,18 @@ type IRouter interface {
 }
 
 //interface of manager
+//one router, one manager
 type IConnManager interface {
+	//for message
 	Quit()
 	SendMessage(para *define.SendMsgPara) error
 	SetMessageType(iType int)
 
+	//for bucket
 	GetBuckets() map[int]IBucket
 	GetBucket(id int) (IBucket, error)
 
+	//for connect
 	CloseWithMessage(conn *websocket.Conn, message string) error
 	CloseConnect(connIds ...int64) error
 
@@ -47,12 +52,18 @@ type IConnManager interface {
 	Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (IWSConn, error)
 	GenConnId() int64
 
+	//for group
+	RemoveGroup(groupId int64) error
+	GetGroup(groupId int64) (IGroup, error)
+	CreateGroup(groupId int64) error
+
 	//cb opt
 	SetCBForReadMessage(cb func(string, int64, int, []byte, *gin.Context) error)
 	SetCBForConnClosed(cb func(string, int64, *gin.Context) error)
 }
 
 //interface of bucket
+//one manager, batch buckets
 type IBucket interface {
 	//other opt
 	Quit()
@@ -72,7 +83,17 @@ type IBucket interface {
 	SetMsgType(msgType int)
 }
 
+//interface of group
+//one manager, batch groups
+type IGroup interface {
+	Clear()
+	SendMessage(msgType int, msg []byte) error
+	Quit(connId int64) error
+	Join(conn IWSConn) error
+}
+
 //interface of ws connect
+//one bucket, batch connects
 type IWSConn interface {
 	//adv
 	GetConnId() int64

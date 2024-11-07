@@ -22,10 +22,12 @@ import (
 type Manager struct {
 	router IRouter //reference from outside
 	remoteAddrMap map[string]int64 //remoteAddr -> connectId
+	groupMap map[int64]IGroup //groupId -> IGroup
 	bucketMap map[int]IBucket //idx -> IBucket
 	buckets int //running buckets
 	msgType int //reference from router
 	connectId int64 //atom connect id
+	groupLocker sync.RWMutex
 	locker sync.RWMutex
 	sync.RWMutex
 }
@@ -35,6 +37,7 @@ func NewManager(router IRouter) *Manager {
 	this := &Manager{
 		router: router,
 		remoteAddrMap: map[string]int64{},
+		groupMap: map[int64]IGroup{},
 		bucketMap: map[int]IBucket{},
 		msgType: router.GetRouterCfg().MsgType,
 	}
@@ -60,6 +63,65 @@ func (f *Manager) Quit() {
 
 	//gc memory
 	runtime.GC()
+}
+
+//for group
+//remove group
+func (f *Manager) RemoveGroup(groupId int64) error {
+	//check
+	if groupId <= 0 {
+		return errors.New("invalid parameter")
+	}
+
+	//remove with locker
+	f.groupLocker.Lock()
+	defer f.groupLocker.Unlock()
+	delete(f.groupMap, groupId)
+
+	//gc opt
+	if len(f.groupMap) <= 0 {
+		runtime.GC()
+	}
+
+	return nil
+}
+
+//get group
+func (f *Manager) GetGroup(groupId int64) (IGroup, error) {
+	//check
+	if groupId <= 0 {
+		return nil, errors.New("invalid parameter")
+	}
+
+	//get with locker
+	f.groupLocker.Lock()
+	defer f.groupLocker.Unlock()
+	group, ok := f.groupMap[groupId]
+	if ok && group != nil {
+		return group, nil
+	}
+	return nil, nil
+}
+
+//create new group
+func (f *Manager) CreateGroup(groupId int64) error {
+	//check
+	if groupId <= 0 {
+		return errors.New("invalid parameter")
+	}
+
+	//get old group
+	oldGroup, err := f.GetGroup(groupId)
+	if err != nil || oldGroup != nil {
+		return errors.New("group has exists")
+	}
+
+	//create new group
+	f.groupLocker.Lock()
+	defer f.groupLocker.Unlock()
+	newGroup := NewGroup(groupId)
+	f.groupMap[groupId] = newGroup
+	return nil
 }
 
 //gen new connect id
