@@ -10,6 +10,7 @@ import (
  * @author Andy Chow <diudiu8848@163.com>
  * websocket temp group
  * - dynamic create temp groups
+ * - inter ws connections are all references
  * - one router, batch groups
  */
 
@@ -55,16 +56,18 @@ func (f *Group) SendMessage(msgType int, msg []byte) error {
 }
 
 //quit group
-func (f *Group)  Quit(connId int64) error {
+func (f *Group) Quit(connIds ...int64) error {
 	//check
-	if connId <= 0 {
+	if connIds == nil || len(connIds) <= 0 {
 		return errors.New("invalid parameter")
 	}
 
 	//remove from map with locker
 	f.Lock()
 	defer f.Unlock()
-	delete(f.connMap, connId)
+	for _, connId := range connIds {
+		delete(f.connMap, connId)
+	}
 
 	//check and gc opt
 	if len(f.connMap) <= 0 {

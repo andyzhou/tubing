@@ -30,7 +30,6 @@ type WSConn struct {
 	activeTime int64
 	tagLock sync.RWMutex
 	propLock sync.RWMutex
-	connLock sync.RWMutex
 }
 
 //construct

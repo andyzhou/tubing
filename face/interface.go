@@ -88,7 +88,7 @@ type IBucket interface {
 type IGroup interface {
 	Clear()
 	SendMessage(msgType int, msg []byte) error
-	Quit(connId int64) error
+	Quit(connIds ...int64) error
 	Join(conn IWSConn) error
 }
 
