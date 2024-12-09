@@ -2,6 +2,7 @@ package face
 
 import (
 	"errors"
+	"fmt"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -21,14 +22,14 @@ import (
 //manager info
 type Manager struct {
 	router IRouter //reference from outside
-	remoteAddrMap map[string]int64 //remoteAddr -> connectId
-	groupMap map[int64]IGroup //groupId -> IGroup
-	bucketMap map[int]IBucket //idx -> IBucket
-	buckets int //running buckets
-	msgType int //reference from router
-	connectId int64 //atom connect id
-	groupLocker sync.RWMutex
-	locker sync.RWMutex
+	remote IRemote //inter remote and conn contain
+	groupMap                 map[int64]IGroup //groupId -> IGroup
+	bucketMap                map[int]IBucket  //idx -> IBucket
+	buckets                  int              //running buckets
+	msgType                  int              //reference from router
+	connectId                int64            //atom connect id
+	groupLocker              sync.RWMutex
+	locker                   sync.RWMutex
 	sync.RWMutex
 }
 
@@ -36,7 +37,7 @@ type Manager struct {
 func NewManager(router IRouter) *Manager {
 	this := &Manager{
 		router: router,
-		remoteAddrMap: map[string]int64{},
+		remote: NewRemote(),
 		groupMap: map[int64]IGroup{},
 		bucketMap: map[int]IBucket{},
 		msgType: router.GetRouterCfg().MsgType,
@@ -57,9 +58,9 @@ func (f *Manager) Quit() {
 		v.Quit()
 		delete(f.bucketMap, k)
 	}
-	for k, _ := range f.remoteAddrMap {
-		delete(f.remoteAddrMap, k)
-	}
+
+	//remote clean up
+	f.remote.Cleanup()
 
 	//gc memory
 	runtime.GC()
@@ -213,16 +214,16 @@ func (f *Manager) GetBuckets() map[int]IBucket {
 }
 
 //get bucket by id
-func (f *Manager) GetBucket(id int) (IBucket, error) {
+func (f *Manager) GetBucket(bucketId int) (IBucket, error) {
 	//check
-	if id <= 0 {
+	if bucketId < 0 {
 		return nil, errors.New("invalid parameter")
 	}
 
 	//get by id with locker
 	f.locker.Lock()
 	defer f.locker.Unlock()
-	v, ok := f.bucketMap[id]
+	v, ok := f.bucketMap[bucketId]
 	if !ok || v == nil {
 		return nil, nil
 	}
@@ -300,16 +301,8 @@ func (f *Manager) CloseWithMessage(
 	targetBucket.CloseConnect(connId)
 
 	//delete remote addr
-	f.Lock()
-	defer f.Unlock()
-	delete(f.remoteAddrMap, remoteAddr)
-
-	//gc opt
-	if len(f.remoteAddrMap) <= 0 {
-		f.remoteAddrMap = map[string]int64{}
-		runtime.GC()
-	}
-	return nil
+	err = f.remote.DelRemote(remoteAddr)
+	return err
 }
 
 //close conn by ids
@@ -324,7 +317,6 @@ func (f *Manager) CloseConnect(connIds ...int64) error {
 	}
 
 	//close one by one
-	gcOpt := false
 	for _, connId := range connIds {
 		//get target bucket by connect id
 		targetBucketId := int(connId % int64(f.buckets))
@@ -338,18 +330,9 @@ func (f *Manager) CloseConnect(connIds ...int64) error {
 		remoteAddrMap, _ := targetBucket.CloseConnect(connId)
 		if remoteAddrMap != nil {
 			for _, addr := range remoteAddrMap {
-				delete(f.remoteAddrMap, addr)
+				f.remote.DelRemote(addr)
 			}
-			gcOpt = true
 		}
-	}
-
-	//memory gc opt
-	if gcOpt {
-		if len(f.remoteAddrMap) <= 0 {
-			f.remoteAddrMap = map[string]int64{}
-		}
-		runtime.GC()
 	}
 	return nil
 }
@@ -358,7 +341,7 @@ func (f *Manager) CloseConnect(connIds ...int64) error {
 func (f *Manager) Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (IWSConn, error) {
 	//check
 	if connId <= 0 || conn == nil {
-		return nil, errors.New("invalid parameter")
+		return nil, fmt.Errorf("invalid parameter, connid:%v, conn:%v\n", connId, conn)
 	}
 	connRemoteAddr := conn.RemoteAddr().String()
 
@@ -377,9 +360,7 @@ func (f *Manager) Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (
 	}
 
 	//add remote addr
-	f.Lock()
-	defer f.Unlock()
-	f.remoteAddrMap[connRemoteAddr] = connId
+	err = f.remote.AddRemote(connRemoteAddr, connId)
 
 	//add new ws connect on target bucket
 	err = targetBucket.AddConnect(wsConn)
@@ -519,10 +500,8 @@ func (f *Manager) getConnIdByRemoteAddr(remoteAddr string) (int64, error) {
 	if remoteAddr == "" {
 		return 0, errors.New("invalid parameter")
 	}
-	f.Lock()
-	defer f.Unlock()
-	v, _ := f.remoteAddrMap[remoteAddr]
-	return v, nil
+	v, err := f.remote.GetRemote(remoteAddr)
+	return v, err
 }
 
 //inter init
@@ -536,7 +515,7 @@ func (f *Manager) interInit() {
 
 	//init all buckets
 	for i := 0; i < buckets; i++ {
-		bucket := NewBucket(i, f.router)
+		bucket := NewBucket(i, f.router, f.remote)
 		f.bucketMap[i] = bucket
 	}
 }

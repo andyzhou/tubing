@@ -62,6 +62,15 @@ type IConnManager interface {
 	SetCBForConnClosed(cb func(string, int64, *gin.Context) error)
 }
 
+//interface of remote
+//one manager, one remote
+type IRemote interface {
+	Cleanup()
+	DelRemote(addr string) error
+	GetRemote(addr string) (int64, error)
+	AddRemote(addr string, connId int64) error
+}
+
 //interface of bucket
 //one manager, batch buckets
 type IBucket interface {

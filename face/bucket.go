@@ -25,29 +25,31 @@ import (
 //face info
 type Bucket struct {
 	//inter obj
-	bucketId int
-	msgType int //reference from router
-	router IRouter //reference from outside
+	bucketId          int
+	msgType           int           //reference from router
+	router            IRouter       //reference from outside
+	remote            IRemote       //reference from manager
 	activeCheckTicker *queue.Ticker //ticker for check active connect
-	readMsgTicker *queue.Ticker //ticker for read connect msg
-	sendMsgQueue *queue.List //inter queue list for send message
+	readMsgTicker     *queue.Ticker //ticker for read connect msg
+	sendMsgQueue      *queue.List   //inter queue list for send message
 
 	//run env data
-	connMap map[int64]IWSConn //connId -> IWSConn
-	connRemoteMap map[string]int64 //remoteAddr -> connId
-	connCount int64
+	connMap       map[int64]IWSConn //connId -> IWSConn
+	connRemoteMap map[string]int64  //remoteAddr -> connId
+	connCount     int64
 
 	//cb func
 	cbForReadMessage func(string, int64, int, []byte, *gin.Context) error
-	cbForConnClosed func(string, int64, *gin.Context) error
+	cbForConnClosed  func(string, int64, *gin.Context) error
 	sync.RWMutex
 }
 
 //construct
-func NewBucket(id int, router IRouter) *Bucket {
+func NewBucket(id int, router IRouter, remote IRemote) *Bucket {
 	this := &Bucket{
 		bucketId: id,
 		router: router,
+		remote: remote,
 		connMap: map[int64]IWSConn{},
 		connRemoteMap: map[string]int64{},
 	}
@@ -64,7 +66,6 @@ func (f *Bucket) Quit() {
 	if f.activeCheckTicker != nil {
 		f.activeCheckTicker.Quit()
 	}
-
 	//free memory
 	f.freeRunMemory()
 }
@@ -155,8 +156,6 @@ func (f *Bucket) CloseWithMessage(conn *websocket.Conn, message string) error {
 	remoteAddr := conn.RemoteAddr().String()
 
 	//get connect id by remote address
-	f.Lock()
-	defer f.Unlock()
 	connId, _ := f.connRemoteMap[remoteAddr]
 	if connId > 0 {
 		//close connect from manager
@@ -173,7 +172,9 @@ func (f *Bucket) CloseConnect(connIds ...int64) (map[int64]string, error) {
 		return nil, errors.New("invalid parameter")
 	}
 
-	//loop opt
+	//loop opt with locker
+	f.Lock()
+	defer f.Unlock()
 	succeed := 0
 	result := make(map[int64]string)
 	for _, connId := range connIds {
@@ -198,7 +199,7 @@ func (f *Bucket) CloseConnect(connIds ...int64) (map[int64]string, error) {
 	}
 
 	//check and run gc
-	if succeed > 0 && f.connCount <= 0 {
+	if f.connCount <= 0 {
 		f.connMap = map[int64]IWSConn{}
 		f.connRemoteMap = map[string]int64{}
 		atomic.StoreInt64(&f.connCount, 0)
@@ -240,11 +241,9 @@ func (f *Bucket) closeConnect(conn IWSConn) error {
 	}
 
 	//close ws connect
-	defer conn.Close()
+	err := conn.Close()
 
 	//remove from run env
-	f.Lock()
-	defer f.Unlock()
 	remoteAddr := conn.GetRemoteAddr()
 	if remoteAddr != "" {
 		delete(f.connRemoteMap, remoteAddr)
@@ -252,7 +251,13 @@ func (f *Bucket) closeConnect(conn IWSConn) error {
 
 	delete(f.connMap, conn.GetConnId())
 	atomic.AddInt64(&f.connCount, -1)
-	return nil
+
+	//log.Printf("bucket:%v, closeConnect, connCount:%v\n", f.bucketId, f.connCount)
+	if f.connCount <= 0 {
+		//gc opt
+		f.freeRunMemory()
+	}
+	return err
 }
 
 //cb for read connect data
@@ -268,7 +273,9 @@ func (f *Bucket) cbForReadConnData() error {
 		return errors.New("no any active connections")
 	}
 
-	//loop read connect data
+	//loop read connect data with locker
+	f.Lock()
+	defer f.Unlock()
 	hasCloseOpt := false
 	for connId, conn := range f.connMap {
 		//check connect
@@ -283,8 +290,13 @@ func (f *Bucket) cbForReadConnData() error {
 		//read message
 		messageType, message, err = connObj.Read()
 		if err != nil {
-			//close connect and remove it
-			connObj.Close()
+			//call manager api to clean the connect obj
+			if f.remote != nil {
+				remoteAddr := connObj.GetRemoteAddr()
+				if remoteAddr != "" {
+					f.remote.DelRemote(remoteAddr)
+				}
+			}
 
 			//check and call closed cb
 			if f.cbForConnClosed != nil {
@@ -293,6 +305,9 @@ func (f *Bucket) cbForReadConnData() error {
 
 			//remove from bucket
 			f.closeConnect(conn)
+
+			//close connect and remove it
+			connObj.Close()
 			hasCloseOpt = true
 			continue
 		}
@@ -441,16 +456,17 @@ func (f *Bucket) checkSendCondition(para *define.SendMsgPara, conn IWSConn) bool
 //free run memory
 func (f *Bucket) freeRunMemory() {
 	//free memory
-	f.Lock()
-	defer f.Unlock()
 	f.connMap = map[int64]IWSConn{}
 	f.connRemoteMap = map[string]int64{}
 	runtime.GC()
+	log.Printf("bucket:%v, freeRunMemory, conn count:%v\n", f.bucketId, f.connCount)
 }
 
 //cb for active connect check
 func (f *Bucket) cbForCheckActiveConn() error {
 	succeed := 0
+	f.Lock()
+	defer f.Unlock()
 	for _, conn := range f.connMap {
 		isActive := conn.ConnIsActive()
 		if !isActive {
@@ -463,6 +479,12 @@ func (f *Bucket) cbForCheckActiveConn() error {
 	if succeed > 0 {
 		runtime.GC()
 	}
+	return nil
+}
+
+//cb for inter check ticker
+func (f *Bucket) cbForInterCheckTicker() error {
+	log.Printf("bucket conn count:%v\n", f.connCount)
 	return nil
 }
 

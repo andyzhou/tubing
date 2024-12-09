@@ -7,7 +7,7 @@ const (
 
 //message type
 const (
-	MessageTypeOfJsonInfo = "json"
+	MessageTypeOfJsonInfo  = "json"
 	MessageTypeOfOctetInfo = "octet"
 )
 

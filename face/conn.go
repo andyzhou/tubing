@@ -5,7 +5,6 @@ import (
 	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"log"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -20,16 +19,16 @@ import (
 
 //web socket connect info
 type WSConn struct {
-	connId int64 //connect id
-	ownerId int64
-	ctx *gin.Context //reference
-	conn *websocket.Conn //reference
-	propMap map[string]interface{}
-	tagMap map[string]bool
+	connId     int64 //connect id
+	ownerId    int64
+	ctx        *gin.Context    //reference
+	conn       *websocket.Conn //reference
+	propMap    map[string]interface{}
+	tagMap     map[string]bool
 	remoteAddr string
 	activeTime int64
-	tagLock sync.RWMutex
-	propLock sync.RWMutex
+	tagLock    sync.RWMutex
+	propLock   sync.RWMutex
 }
 
 //construct
@@ -42,6 +41,33 @@ func NewWSConn(conn *websocket.Conn, connId int64, ctx *gin.Context) *WSConn {
 		tagMap: map[string]bool{},
 	}
 	return this
+}
+
+//close conn
+func (f *WSConn) CloseWithMessage(message string) error {
+	//close with locker
+	//f.connLock.Lock()
+	//defer f.connLock.Unlock()
+	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
+	f.conn.WriteMessage(websocket.CloseMessage, msg)
+	return f.Close()
+}
+func (f *WSConn) Close() error {
+	//close with locker
+	err := f.conn.Close()
+
+	//release memory
+	f.propLock.Lock()
+	f.propMap = map[string]interface{}{}
+	f.propLock.Unlock()
+
+	f.tagLock.Lock()
+	f.tagMap = map[string]bool{}
+	f.tagLock.Unlock()
+
+	//gc opt
+	runtime.GC()
+	return err
 }
 
 //get connect id
@@ -257,29 +283,4 @@ func (f *WSConn) Read() (int, []byte, error) {
 	//f.connLock.Lock()
 	//defer f.connLock.Unlock()
 	return f.conn.ReadMessage()
-}
-
-//close conn
-func (f *WSConn) CloseWithMessage(message string) error {
-	//close with locker
-	//f.connLock.Lock()
-	//defer f.connLock.Unlock()
-	msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, message)
-	f.conn.WriteMessage(websocket.CloseMessage, msg)
-	return f.Close()
-}
-func (f *WSConn) Close() error {
-	//close with locker
-	err := f.conn.Close()
-	if err != nil {
-		log.Printf("conn.Close failed, connId:%v, err:%v\n", f.connId, err.Error())
-	}
-
-	//release memory
-	f.propMap = map[string]interface{}{}
-	f.tagMap = map[string]bool{}
-
-	//gc opt
-	runtime.GC()
-	return nil
 }

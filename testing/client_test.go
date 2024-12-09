@@ -1,8 +1,11 @@
 package testing
 
 import (
+	"fmt"
 	"github.com/andyzhou/tubing"
+	"sync"
 	"testing"
+	"time"
 )
 
 const (
@@ -36,13 +39,27 @@ func readMessage(message *tubing.WebSocketMessage) error {
 	return nil
 }
 
+//write message
+func sendMessage(c *tubing.OneWSClient, wg *sync.WaitGroup, b *testing.B) {
+	defer (*wg).Done()
+	if c.IsClosed() {
+		return
+	}
+	message := []byte(fmt.Sprintf("hello %v", time.Now().Unix()))
+	err := c.SendMessage(message)
+	if err != nil {
+		b.Errorf("sendMessage, err:%v\n", err.Error())
+		return
+	}
+}
+
 //create ws client
 func createWsClient() (*tubing.OneWSClient, error) {
 	return client.CreateClient(para)
 }
 
 //test api
-func TestCreate(t *testing.T) {
+func TestClient(t *testing.T) {
 	subClient, err := createWsClient()
 	if err != nil {
 		t.Errorf("test create failed, err:%v\n", err.Error())
@@ -51,7 +68,10 @@ func TestCreate(t *testing.T) {
 }
 
 //benchmark api
-func BenchmarkCreate(b *testing.B) {
+func BenchmarkClient(b *testing.B) {
+	var (
+		wg = sync.WaitGroup{}
+	)
 	succeed := 0
 	failed := 0
 	wsArr := make([]*tubing.OneWSClient, 0)
@@ -61,11 +81,19 @@ func BenchmarkCreate(b *testing.B) {
 			failed++
 			break
 		}
+
+		//send message
+		wg.Add(1)
+		sendMessage(ws, &wg, b)
 		wsArr = append(wsArr, ws)
 		succeed++
 	}
 	b.Logf("benchmark create done, N:%v, succeed:%v, failed:%v\n",
 		b.N, succeed, failed)
+
+	wg.Wait()
+	b.Logf("benchmark, all done, clean up\n")
+
 	//close connect
 	for _, v := range wsArr {
 		v.Quit()

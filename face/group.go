@@ -2,6 +2,7 @@ package face
 
 import (
 	"errors"
+	"log"
 	"runtime"
 	"sync"
 )
@@ -73,6 +74,7 @@ func (f *Group) Quit(connIds ...int64) error {
 	if len(f.connMap) <= 0 {
 		f.connMap = map[int64]IWSConn{}
 		runtime.GC()
+		log.Printf("group:%v, gc opt..\n", f.groupId)
 	}
 	return nil
 }

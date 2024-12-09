@@ -53,8 +53,8 @@ func cbForConnected(
 	//log.Printf("cbForConnected, connId:%v\n", connId)
 
 	//get para
-	namePara := tubing.GetServer().GetPara("name", ctx)
-	log.Printf("cbForConnected, namePara:%v\n", namePara)
+	//namePara := tubing.GetServer().GetPara("name", ctx)
+	//log.Printf("cbForConnected, namePara:%v\n", namePara)
 
 	//get router
 	router, err := getRouterByName(routerName)
@@ -74,7 +74,9 @@ func cbForConnected(
 	messageType := define.MessageTypeOfJson
 	message := []byte("welcome you!")
 	err = conn.Write(messageType, message)
-	log.Printf("cbForConnected, connId:%v, send result:%v\n", connId, err)
+	if err != nil {
+		log.Printf("cbForConnected, connId:%v, send result:%v\n", connId, err)
+	}
 	return nil
 }
 
@@ -83,7 +85,7 @@ func cbForClosed(
 	routerName string,
 	connId int64,
 	ctx *gin.Context) error {
-	log.Printf("cbForClosed, connId:%v\n", connId)
+	//log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
 
@@ -97,8 +99,8 @@ func cbForRead(
 	if tb == nil {
 		return errors.New("tb not init yet")
 	}
-	log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
-		connId, messageType, string(message))
+	//log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
+	//	connId, messageType, string(message))
 
 	//decode message
 	messageObj := json.NewMessageJson()
@@ -202,7 +204,7 @@ func createGin(isReleases ...bool) *gin.Engine {
 		isRelease = isReleases[0]
 	}
 	if isRelease {
-		gin.SetMode("release")
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	//init default gin and page
@@ -259,7 +261,7 @@ func startApp(c *cli.Context) error {
 
 	//try start service
 	wg.Add(1)
-	err = tb.StartGin(ServerPort)
+	err = tb.StartGin(ServerPort, true)
 	if err != nil {
 		return err
 	}
