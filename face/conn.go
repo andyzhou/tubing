@@ -20,7 +20,7 @@ import (
 //web socket connect info
 type WSConn struct {
 	connId     int64 //connect id
-	ownerId    int64
+	ownerId    int64 //conn owner id
 	ctx        *gin.Context    //reference
 	conn       *websocket.Conn //reference
 	propMap    map[string]interface{}

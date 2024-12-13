@@ -58,8 +58,8 @@ type IConnManager interface {
 	CreateGroup(groupId int64) error
 
 	//cb opt
-	SetCBForReadMessage(cb func(string, int64, int, []byte, *gin.Context) error)
-	SetCBForConnClosed(cb func(string, int64, *gin.Context) error)
+	SetCBForReadMessage(cb func(string, int64, IWSConn, int, []byte, *gin.Context) error)
+	SetCBForConnClosed(cb func(string, int64, IWSConn, *gin.Context) error)
 }
 
 //interface of remote
@@ -87,8 +87,8 @@ type IBucket interface {
 	AddConnect(conn IWSConn) error
 
 	//opt for cb func
-	SetCBForReadMessage(cb func(string, int64, int, []byte, *gin.Context) error)
-	SetCBForConnClosed(cb func(string, int64, *gin.Context) error)
+	SetCBForReadMessage(cb func(string, int64, IWSConn, int, []byte, *gin.Context) error)
+	SetCBForConnClosed(cb func(string, int64, IWSConn, *gin.Context) error)
 	SetMsgType(msgType int)
 }
 

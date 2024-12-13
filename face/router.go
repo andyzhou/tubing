@@ -42,9 +42,9 @@ type Router struct {
 
 	//cb func
 	cbForGenConnId func() int64
-	cbForConnected func(routerName string, connId int64, ctx *gin.Context) error
-	cbForClosed    func(routerName string, connId int64, ctx *gin.Context) error
-	cbForRead      func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error
+	cbForConnected func(routerName string, connId int64, conn IWSConn, ctx *gin.Context) error
+	cbForClosed    func(routerName string, connId int64, conn IWSConn, ctx *gin.Context) error
+	cbForRead      func(routerName string, connId int64, conn IWSConn, messageType int, message []byte, ctx *gin.Context) error
 }
 
 //construct
@@ -127,7 +127,7 @@ func (f *Router) SetCBForGenConnId(cb func() int64) {
 }
 
 //set cb func for connected
-func (f *Router) SetCBForConnected(cb func(routerName string, connId int64, ctx *gin.Context) error) {
+func (f *Router) SetCBForConnected(cb func(routerName string, connId int64, conn IWSConn, ctx *gin.Context) error) {
 	if cb == nil {
 		return
 	}
@@ -135,7 +135,7 @@ func (f *Router) SetCBForConnected(cb func(routerName string, connId int64, ctx 
 }
 
 //set cb func for conn closed
-func (f *Router) SetCBForClosed(cb func(routerName string, connId int64, ctx *gin.Context) error) {
+func (f *Router) SetCBForClosed(cb func(routerName string, connId int64, conn IWSConn, ctx *gin.Context) error) {
 	if cb == nil {
 		return
 	}
@@ -144,7 +144,7 @@ func (f *Router) SetCBForClosed(cb func(routerName string, connId int64, ctx *gi
 }
 
 //set cb func for read data
-func (f *Router) SetCBForRead(cb func(routerName string, connId int64, messageType int, message []byte, ctx *gin.Context) error) {
+func (f *Router) SetCBForRead(cb func(routerName string, connId int64, conn IWSConn, messageType int, message []byte, ctx *gin.Context) error) {
 	if cb == nil {
 		return
 	}
@@ -212,7 +212,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 	}
 
 	//accept new connect
-	_, subErr := f.connManager.Accept(newConnId, conn, ctx)
+	wsConn, subErr := f.connManager.Accept(newConnId, conn, ctx)
 	if subErr != nil {
 		//accept failed
 		log.Printf("Router:Entry, accept connect failed, err:%v\n", subErr.Error())
@@ -221,20 +221,20 @@ func (f *Router) Entry(ctx *gin.Context) {
 			log.Printf("Router:Entry, manager closed failed, err:%v\n", err.Error())
 		}
 		if f.cbForClosed != nil {
-			f.cbForClosed(f.rc.Name, newConnId, ctx)
+			f.cbForClosed(f.rc.Name, newConnId, wsConn, ctx)
 		}
 		return
 	}
 
 	//cb connect
 	if f.cbForConnected != nil {
-		err = f.cbForConnected(f.rc.Name, newConnId, ctx)
+		err = f.cbForConnected(f.rc.Name, newConnId, wsConn, ctx)
 		if err != nil {
 			log.Printf("Router:Entry, cbForConnected err:%v\n", err.Error())
 			//call cb connected failed, force close connect
 			f.connManager.CloseWithMessage(conn, err.Error())
 			if f.cbForClosed != nil {
-				f.cbForClosed(f.rc.Name, newConnId, ctx)
+				f.cbForClosed(f.rc.Name, newConnId, wsConn, ctx)
 			}
 			return
 		}

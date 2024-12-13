@@ -368,14 +368,14 @@ func (f *Manager) Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (
 }
 
 //set cb for read messages
-func (f *Manager) SetCBForReadMessage(cb func(string, int64, int, []byte, *gin.Context) error) {
+func (f *Manager) SetCBForReadMessage(cb func(string, int64, IWSConn, int, []byte, *gin.Context) error) {
 	for _, v := range f.bucketMap {
 		v.SetCBForReadMessage(cb)
 	}
 }
 
 //set cb for connect closed
-func (f *Manager) SetCBForConnClosed(cb func(string, int64, *gin.Context) error) {
+func (f *Manager) SetCBForConnClosed(cb func(string, int64, IWSConn, *gin.Context) error) {
 	for _, v := range f.bucketMap {
 		v.SetCBForConnClosed(cb)
 	}

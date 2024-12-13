@@ -49,6 +49,7 @@ func signalProcess() {
 func cbForConnected(
 	routerName string,
 	connId int64,
+	conn face.IWSConn,
 	ctx *gin.Context) error {
 	//log.Printf("cbForConnected, connId:%v\n", connId)
 
@@ -84,6 +85,7 @@ func cbForConnected(
 func cbForClosed(
 	routerName string,
 	connId int64,
+	conn face.IWSConn,
 	ctx *gin.Context) error {
 	//log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
@@ -93,6 +95,7 @@ func cbForClosed(
 func cbForRead(
 	routerName string,
 	connId int64,
+	conn face.IWSConn,
 	messageType int,
 	message []byte,
 	ctx *gin.Context) error {
@@ -132,7 +135,7 @@ func cbForRead(
 			loginObj.Decode(jsonObjByte, loginObj)
 
 			//set conn property
-			conn, _ := router.GetManager().GetConn(connId)
+			//conn, _ := router.GetManager().GetConn(connId)
 			if conn != nil && loginObj != nil {
 				conn.SetProp(eDefine.PropNameOfUserId, loginObj.Id)
 				conn.SetProp(eDefine.PropNameOfUserNick, loginObj.Nick)
@@ -151,7 +154,7 @@ func cbForRead(
 			chatObj.Decode(jsonObjByte, chatObj)
 
 			//get conn property
-			conn, _ := router.GetManager().GetConn(connId)
+			//conn, _ := router.GetManager().GetConn(connId)
 			if conn != nil && chatObj != nil {
 				userNick, _ := conn.GetProp(eDefine.PropNameOfUserNick)
 				if userNick != nil {
