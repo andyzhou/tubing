@@ -106,6 +106,7 @@ type IGroup interface {
 type IWSConn interface {
 	//adv
 	GetConnId() int64
+	GetConnect() *websocket.Conn
 	GetContext() *gin.Context
 	GetRemoteAddr() string
 	ConnIsActive(checkRates ...int) bool

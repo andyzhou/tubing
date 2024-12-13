@@ -75,6 +75,11 @@ func (f *WSConn) GetConnId() int64 {
 	return f.connId
 }
 
+//get connect
+func (f *WSConn) GetConnect() *websocket.Conn {
+	return f.conn
+}
+
 //get gin context
 func (f *WSConn) GetContext() *gin.Context {
 	return f.ctx
