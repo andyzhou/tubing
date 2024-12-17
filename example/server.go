@@ -67,11 +67,11 @@ func cbForConnected(
 	}
 
 	//cast welcome message
-	conn, subErr := router.GetManager().GetConn(connId)
-	if subErr != nil || conn == nil {
-		log.Printf("cbForConnected, connId:%v, get conn failed, err:%v\n", connId, subErr)
-		return subErr
-	}
+	//conn, subErr := router.GetManager().GetConn(connId)
+	//if subErr != nil || conn == nil {
+	//	log.Printf("cbForConnected, connId:%v, get conn failed, err:%v\n", connId, subErr)
+	//	return subErr
+	//}
 	messageType := define.MessageTypeOfJson
 	message := []byte("welcome you!")
 	err = conn.Write(messageType, message)

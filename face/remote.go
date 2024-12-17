@@ -2,12 +2,13 @@ package face
 
 import (
 	"errors"
-	"github.com/andyzhou/tubing/define"
 	"log"
 	"math/rand"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/andyzhou/tubing/define"
 )
 
 /*

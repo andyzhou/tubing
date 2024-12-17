@@ -49,7 +49,9 @@ func (f *Group) SendMessage(msgType int, msg []byte) error {
 		return errors.New("invalid parameter")
 	}
 
-	//cast to all
+	//cast to all with locker
+	f.Lock()
+	defer f.Unlock()
 	for _, conn := range f.connMap {
 		err = conn.Write(msgType, msg)
 	}

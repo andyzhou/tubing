@@ -3,13 +3,14 @@ package tubing
 import (
 	"errors"
 	"fmt"
-	"github.com/andyzhou/tubing/define"
-	"github.com/andyzhou/tubing/face"
-	"github.com/gin-gonic/gin"
 	"net/url"
 	"runtime"
 	"sync"
 	"sync/atomic"
+
+	"github.com/andyzhou/tubing/define"
+	"github.com/andyzhou/tubing/face"
+	"github.com/gin-gonic/gin"
 )
 
 /*
@@ -280,7 +281,7 @@ func (f *Server) StartGin(port int, isReleases ...bool) error {
 		isRelease = isReleases[0]
 	}
 	if isRelease {
-		gin.SetMode("release")
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	//start server

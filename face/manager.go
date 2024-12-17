@@ -3,12 +3,13 @@ package face
 import (
 	"errors"
 	"fmt"
-	"github.com/andyzhou/tubing/define"
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 	"runtime"
 	"sync"
 	"sync/atomic"
+
+	"github.com/andyzhou/tubing/define"
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 /*

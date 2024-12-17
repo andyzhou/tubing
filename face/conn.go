@@ -2,13 +2,14 @@ package face
 
 import (
 	"errors"
-	"github.com/andyzhou/tubing/define"
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/andyzhou/tubing/define"
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 /*

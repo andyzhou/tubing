@@ -4,10 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/andyzhou/tinylib/queue"
-	"github.com/andyzhou/tubing/base"
-	"github.com/andyzhou/tubing/define"
-	"github.com/gorilla/websocket"
 	"io"
 	"log"
 	"net/url"
@@ -19,6 +15,11 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/andyzhou/tinylib/queue"
+	"github.com/andyzhou/tubing/base"
+	"github.com/andyzhou/tubing/define"
+	"github.com/gorilla/websocket"
 )
 
 /*
@@ -29,21 +30,21 @@ import (
 
 //global variable
 var (
-	wsClient *WebSocketClient
+	wsClient     *WebSocketClient
 	wsClientOnce sync.Once
 )
 
 //message info
 type WebSocketMessage struct {
 	MessageType int
-	Message []byte
+	Message     []byte
 }
 
 //connect para info
 type WebSocketConnPara struct {
-	Host string
-	Port int
-	Uri  string //websocket root uri
+	Host      string
+	Port      int
+	Uri       string                 //websocket root uri
 	QueryPara map[string]interface{} //raw query, key -> val
 	//cb func
 	CBForReadMessage func(message *WebSocketMessage) error
@@ -51,36 +52,36 @@ type WebSocketConnPara struct {
 
 //client info
 type OneWSClient struct {
-	connPara WebSocketConnPara
-	msgType int
-	u *url.URL
-	conn *websocket.Conn
-	connId int64
-	interrupt chan os.Signal
+	connPara      WebSocketConnPara
+	msgType       int
+	u             *url.URL
+	conn          *websocket.Conn
+	connId        int64
+	interrupt     chan os.Signal
 	heartBeatChan chan struct{}
 	heartBeatRate int
-	writeChan chan WebSocketMessage
-	doneChan chan struct{}
-	closeChan chan bool
-	isConnecting bool
-	forceClosed bool
-	autoConn bool //auto connect server switch
-	connLocker sync.RWMutex
+	writeChan     chan WebSocketMessage
+	doneChan      chan struct{}
+	closeChan     chan bool
+	isConnecting  bool
+	forceClosed   bool
+	autoConn      bool //auto connect server switch
+	connLocker    sync.RWMutex
 
 	//cb func
 	cbForReadMessage func(message *WebSocketMessage) error
-	cbForClosed func() error
+	cbForClosed      func() error
 	base.Util
 	sync.RWMutex
 }
 
 //inter websocket manager
 type WebSocketClient struct {
-	messageType int
-	heartBeatRate int
-	autoConnect bool
-	connId int64 //atomic, maybe not same with server side
-	clientMap map[int64]*OneWSClient //connectId -> OneWSClient, c2s
+	messageType    int
+	heartBeatRate  int
+	autoConnect    bool
+	connId         int64                  //atomic, maybe not same with server side
+	clientMap      map[int64]*OneWSClient //connectId -> OneWSClient, c2s
 	consumerTicker *queue.Ticker
 
 	//cb setup
