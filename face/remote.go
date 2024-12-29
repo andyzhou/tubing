@@ -12,6 +12,7 @@ import (
 )
 
 /*
+ * @author Andy Chow <diudiu8848@163.com>
  * remote data face
  * - storage remote addr and conn id in run env
  * - work for manager
@@ -36,6 +37,9 @@ func (f *Remote) Cleanup() {
 	//clean with locker
 	f.Lock()
 	defer f.Unlock()
+	for k, _ := range f.remoteAddrMap {
+		delete(f.remoteAddrMap, k)
+	}
 	f.remoteAddrMap = map[string]int64{}
 	runtime.GC()
 }
@@ -60,8 +64,8 @@ func (f *Remote) DelRemote(addr string) error {
 
 	//cal gc rate
 	rand.Seed(time.Now().UnixNano())
-	gcRate := rand.Intn(100)
-	if gcRate <= define.GcOptRate || remoteAddrLen <= 0 {
+	gcRate := rand.Intn(define.DefaultTenThousandPercent)
+	if gcRate <= define.DefaultGcOptRate || remoteAddrLen <= 0 {
 		runtime.GC()
 		log.Printf("remote.DelRemote, gcRate:%v, remoteAddrLen:%v, gc opt...\n",
 			gcRate, remoteAddrLen)

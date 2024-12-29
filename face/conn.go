@@ -20,8 +20,9 @@ import (
 
 //web socket connect info
 type WSConn struct {
-	connId     int64 //connect id
-	ownerId    int64 //conn owner id
+	connId     int64           //connect id
+	ownerId    int64           //conn owner id
+	groupId    int64           //temp group id
 	ctx        *gin.Context    //reference
 	conn       *websocket.Conn //reference
 	propMap    map[string]interface{}
@@ -30,6 +31,7 @@ type WSConn struct {
 	activeTime int64
 	tagLock    sync.RWMutex
 	propLock   sync.RWMutex
+	sync.RWMutex
 }
 
 //construct
@@ -69,6 +71,14 @@ func (f *WSConn) Close() error {
 	//gc opt
 	runtime.GC()
 	return err
+}
+
+//set get group id
+func (f *WSConn) GetGroupId() int64 {
+	return f.groupId
+}
+func (f *WSConn) SetGroupId(groupId int64) {
+	f.groupId = groupId
 }
 
 //get connect id
@@ -269,10 +279,10 @@ func (f *WSConn) Write(messageType int, data []byte) error {
 	}
 
 	//write message with locker
-	//f.connLock.Lock()
+	f.Lock()
+	defer f.Unlock()
 	defer func() {
 		atomic.StoreInt64(&f.activeTime, time.Now().Unix())
-		//f.connLock.Unlock()
 	}()
 	return f.conn.WriteMessage(messageType, data)
 }
@@ -286,7 +296,7 @@ func (f *WSConn) Read() (int, []byte, error) {
 	}
 
 	//read message with locker
-	//f.connLock.Lock()
-	//defer f.connLock.Unlock()
+	f.Lock()
+	defer f.Unlock()
 	return f.conn.ReadMessage()
 }

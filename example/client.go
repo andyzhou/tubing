@@ -21,7 +21,7 @@ func sendMessage(c *tubing.OneWSClient) {
 	for {
 		if c.IsClosed() {
 			time.Sleep(time.Second)
-			continue
+			break
 		}
 		message := []byte(fmt.Sprintf("hello %v", time.Now().Unix()))
 		err := c.SendMessage(message)
@@ -30,6 +30,7 @@ func sendMessage(c *tubing.OneWSClient) {
 		}
 		time.Sleep(time.Second/10)
 	}
+	log.Printf("send message done!\n")
 }
 
 //send heart beat
@@ -56,6 +57,7 @@ func cbForReadMessage(connId int64, messageType int, message []byte) error {
 func main() {
 	var (
 		wg sync.WaitGroup
+		clients = 64
 	)
 
 	//init conn para
@@ -69,14 +71,17 @@ func main() {
 	//init client
 	c := tubing.NewWebSocketClient()
 	c.SetCBForReadMessage(cbForReadMessage)
-	oneClient, err := c.CreateClient(para)
-	if err != nil {
-		panic(any(err))
-	}
 
-	//spawn send message process
-	go sendMessage(oneClient)
-	go sendHeartBeat(oneClient)
+	//create batch sub clients
+	for i := 0; i < clients; i++ {
+		oneClient, err := c.CreateClient(para)
+		if err != nil {
+			panic(any(err))
+		}
+		//spawn send message process
+		go sendMessage(oneClient)
+		//go sendHeartBeat(oneClient)
+	}
 
 	//auto close after 20 seconds
 	//sf := func() {

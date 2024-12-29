@@ -51,7 +51,7 @@ func cbForConnected(
 	connId int64,
 	conn face.IWSConn,
 	ctx *gin.Context) error {
-	//log.Printf("cbForConnected, connId:%v\n", connId)
+	log.Printf("cbForConnected, connId:%v\n", connId)
 
 	//get para
 	//namePara := tubing.GetServer().GetPara("name", ctx)
@@ -87,7 +87,7 @@ func cbForClosed(
 	connId int64,
 	conn face.IWSConn,
 	ctx *gin.Context) error {
-	//log.Printf("cbForClosed, connId:%v\n", connId)
+	log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
 
@@ -102,8 +102,17 @@ func cbForRead(
 	if tb == nil {
 		return errors.New("tb not init yet")
 	}
-	//log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
-	//	connId, messageType, string(message))
+	log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
+		connId, messageType, string(message))
+
+	//defer opt
+	defer func() {
+		//send reply
+		err := conn.Write(messageType, message)
+		if err != nil {
+			log.Printf("cbForRead failed, err:%v\n", err.Error())
+		}
+	}()
 
 	//decode message
 	messageObj := json.NewMessageJson()
@@ -248,6 +257,7 @@ func startApp(c *cli.Context) error {
 		RouterUri: RouterUri,
 		Buckets: Buckets,
 		MsgType: define.MessageTypeOfJson,
+		ReadByteRate: 0.1, //xx seconds
 		CheckActiveRate: 2, //2 seconds
 		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,

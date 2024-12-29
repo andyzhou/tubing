@@ -22,15 +22,15 @@ import (
 
 //manager info
 type Manager struct {
-	router IRouter //reference from outside
-	remote IRemote //inter remote and conn contain
-	groupMap                 map[int64]IGroup //groupId -> IGroup
-	bucketMap                map[int]IBucket  //idx -> IBucket
-	buckets                  int              //running buckets
-	msgType                  int              //reference from router
-	connectId                int64            //atom connect id
-	groupLocker              sync.RWMutex
-	locker                   sync.RWMutex
+	router      IRouter          //reference from outside
+	remote      IRemote          //inter remote and conn contain
+	groupMap    map[int64]IGroup //groupId -> IGroup
+	bucketMap   map[int]IBucket  //idx -> IBucket
+	buckets     int              //running buckets
+	msgType     int              //reference from router
+	connectId   int64            //atom connect id
+	groupLocker sync.RWMutex
+	locker      sync.RWMutex
 	sync.RWMutex
 }
 
@@ -65,6 +65,14 @@ func (f *Manager) Quit() {
 
 	//gc memory
 	runtime.GC()
+}
+
+func (f *Manager) GetRouter() IRouter {
+	return f.router
+}
+
+func (f *Manager) GetRemote() IRemote {
+	return f.remote
 }
 
 //for group
@@ -516,7 +524,7 @@ func (f *Manager) interInit() {
 
 	//init all buckets
 	for i := 0; i < buckets; i++ {
-		bucket := NewBucket(i, f.router, f.remote)
+		bucket := NewBucket(i, f)
 		f.bucketMap[i] = bucket
 	}
 }

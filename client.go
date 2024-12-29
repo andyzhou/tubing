@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -42,10 +40,11 @@ type WebSocketMessage struct {
 
 //connect para info
 type WebSocketConnPara struct {
-	Host      string
-	Port      int
-	Uri       string                 //websocket root uri
-	QueryPara map[string]interface{} //raw query, key -> val
+	Host        string
+	Port        int
+	Uri         string                 //websocket root uri
+	ReadTimeout float64                // xx seconds
+	QueryPara   map[string]interface{} //raw query, key -> val
 	//cb func
 	CBForReadMessage func(message *WebSocketMessage) error
 }
@@ -285,21 +284,18 @@ func (f *WebSocketClient) cbForConsumerOpt() error {
 	}
 
 	//loop check with locker
-	for connId, ws := range f.clientMap {
-		if ws == nil {
+	for connId, ows := range f.clientMap {
+		if ows == nil {
 			continue
 		}
 		//read message from server
-		messageType, message, err = ws.readServerMessage()
+		messageType, message, err = ows.readServerMessage()
 		if err != nil {
 			continue
 		}
 		if messageType >= 0 && f.cbForReadMessage != nil {
 			f.cbForReadMessage(connId, messageType, message)
 		}
-
-		//write message to server
-		err = ws.writeServerMessage()
 	}
 	return nil
 }
@@ -381,44 +377,25 @@ func (f *OneWSClient) SetHeartBeatRate(rate int) error {
 
 //send message data
 func (f *OneWSClient) SendMessage(message[]byte) error {
-	var (
-		m any = nil
-	)
 	//check
 	if message == nil {
 		return errors.New("invalid parameter")
 	}
-	if f.writeChan == nil || len(f.writeChan) >= define.DefaultChanSize {
-		return errors.New("write chan is nil or full")
-	}
 	if f.forceClosed {
 		return errors.New("client has force closed")
 	}
+
+	//opt with locker
+	f.connLocker.Lock()
+	defer f.connLocker.Unlock()
 	if f.conn == nil {
 		if !f.isConnecting {
 			f.autoConnect()
 		}
 		return errors.New("connect has closed")
 	}
-
-	//defer
-	defer func() {
-		if subErr := recover(); subErr != m {
-			log.Printf("WebSocketClient:SendData panic, err:%v, track:%v\n", subErr, string(debug.Stack()))
-		}
-	}()
-
-	//init request
-	req := WebSocketMessage{
-		MessageType: f.msgType,
-		Message: message,
-	}
-
-	//async send to chan
-	select {
-	case f.writeChan <- req:
-	}
-	return nil
+	err := f.conn.WriteMessage(f.msgType, message)
+	return err
 }
 
 //detail server
@@ -467,10 +444,8 @@ func (f *OneWSClient) autoConnect() {
 	}
 
 	//delay connect server
-	sf := func() {
-		f.dialServer()
-	}
-	time.AfterFunc(time.Second * 2, sf)
+	f.dialServer()
+	time.Sleep(time.Second/10)
 }
 
 //dial server
@@ -554,13 +529,19 @@ func (f *OneWSClient) readServerMessage() (int, []byte, error) {
 		return 0, nil, errors.New("connect is closed")
 	}
 
+	//setup read timeout
+	readTimeout := f.connPara.ReadTimeout
+	if readTimeout <= 0 {
+		readTimeout = define.DefaultReadTimeout
+	}
+
 	//read original message
-	f.conn.SetReadDeadline(time.Now().Add(time.Duration(0.1 * float64(time.Second))))
+	f.conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout * float64(time.Second))))
 	messageType, message, err := f.conn.ReadMessage()
 	if err != nil {
 		if errors.Is(err, syscall.EPIPE) {
 			//auto connect
-			//f.autoConnect()
+			f.autoConnect()
 			return 0, nil, err
 		}
 	}
@@ -578,176 +559,172 @@ func (f *OneWSClient) readServerMessage() (int, []byte, error) {
 	return messageType, message, nil
 }
 
-//write message to server side
-func (f *OneWSClient) writeServerMessage() error {
-	//check
-	if f.conn == nil || f.forceClosed {
-		return errors.New("connect is closed")
-	}
-
-	//read message from chan
-	writeMessage, isOk := <- f.writeChan
-	if isOk && &writeMessage != nil {
-		err := f.conn.WriteMessage(f.msgType, writeMessage.Message)
-		if errors.Is(err, syscall.EPIPE) {
-			//auto connect
-			//f.autoConnect()
-			return err
-		}
-	}
-	return nil
-}
-
-//////////////////////////////////////
-//following code will be removed!!!
-//////////////////////////////////////
-
+////write message to server side
+//func (f *OneWSClient) writeServerMessage() error {
+//	//check
+//	if f.conn == nil || f.forceClosed {
+//		return errors.New("connect is closed")
+//	}
+//
+//	//read message from chan
+//	writeMessage, isOk := <- f.writeChan
+//	if isOk && &writeMessage != nil {
+//		err := f.conn.WriteMessage(f.msgType, writeMessage.Message)
+//		if errors.Is(err, syscall.EPIPE) {
+//			//auto connect
+//			//f.autoConnect()
+//			return err
+//		}
+//	}
+//	return nil
+//}
+//
 //son process for send and receive
-func (f *OneWSClient) runMainProcess() {
-	var (
-		//heartTicker = time.NewTicker(time.Second * define.ClientHeartBeatRate)
-		writeMessage WebSocketMessage
-		isOk                      bool
-		err                       error
-		m any = nil
-	)
-
-	//defer
-	defer func() {
-		if subErr := recover(); subErr != m {
-			log.Printf("WebSocketClient:runMainProcess panic, err:%v", subErr)
-		}
-		//stop and close
-		f.connLocker.Lock()
-		defer f.connLocker.Unlock()
-		//heartTicker.Stop()
-		if f.conn != nil {
-			f.conn.Close()
-			f.conn = nil
-		}
-		f.isConnecting = false
-	}()
-
-	//setup ticker func
-	heatBeatTicker := func() {
-		sf := func() {
-			if f.heartBeatRate > 0 && f.heartBeatChan != nil {
-				f.heartBeatChan <- struct{}{}
-			}
-		}
-		if f.heartBeatRate > 0 {
-			duration := time.Duration(f.heartBeatRate) * time.Second
-			time.AfterFunc(duration, sf)
-		}
-	}
-
-	//main loop
-	//log.Printf("WebSocketClient:runMainProcess start\n")
-	for {
-		select {
-		case writeMessage, isOk = <- f.writeChan:
-			if isOk {
-				//write message
-				err = f.conn.WriteMessage(f.msgType, writeMessage.Message)
-				if err != nil {
-					log.Printf("WebSocketClient:runMainProcess write failed, err:%v", err)
-					if err == io.EOF {
-						return
-					}
-					if errors.Is(err, syscall.EPIPE) {
-						log.Printf("WebSocketClient:runMainProcess write failed, broken pipe error\n")
-						f.autoConnect()
-						return
-					}
-				}
-			}
-		case <- f.closeChan:
-			{
-				return
-			}
-		case <- f.interrupt:
-			{
-				err = f.conn.WriteMessage(
-					websocket.CloseMessage,
-					websocket.FormatCloseMessage(
-						websocket.CloseNormalClosure,
-						"",
-					),
-				)
-				if err != nil {
-					log.Printf("WebSocketClient:runMainProcess write closed, err:%v", err)
-					return
-				}
-			}
-		case <- f.heartBeatChan:
-			{
-				//heart beat
-				f.heartBeat()
-
-				//send next ticker
-				heatBeatTicker()
-			}
-		}
-	}
-}
-
-//read message from remote server
-func (f *OneWSClient) readMessageFromServer() {
-	var (
-		messageType int
-		message []byte
-		err error
-		m any = nil
-	)
-
-	//defer
-	defer func() {
-		if subErr := recover(); subErr != m {
-			log.Printf("WebSocketClient:readMessageFromServer panic, err:%v", subErr)
-		}
-	}()
-
-	//loop receive message
-	//log.Printf("WebSocketClient:readMessageFromServer start\n")
-	for {
-		//check
-		if f.conn == nil {
-			//log.Printf("WebSocketClient:readMessageFromServer connect is nil\n")
-			return
-		}
-		if f.forceClosed {
-			return
-		}
-
-		//read original message
-		messageType, message, err = f.conn.ReadMessage()
-		if err != nil {
-			//log.Printf("WebSocketClient:readMessageFromServer failed, connId:%v, err:%v",
-			//	f.connId, err.Error())
-			if errors.Is(err, syscall.EPIPE) {
-				//log.Printf("WebSocketClient:readMessageFromServer write failed, broken pipe error\n")
-				log.Printf("WebSocketClient:readMessageFromServer broken pipe error\n")
-				f.autoConnect()
-				return
-			}
-			if err == io.EOF {
-				log.Printf("WebSocketClient:readMessageFromServer EOF\n")
-				return
-			}
-			if err == websocket.ErrCloseSent {
-				log.Printf("WebSocketClient:readMessageFromServer ErrCloseSent\n")
-				return
-			}
-		}
-
-		//call cb for read message
-		if f.cbForReadMessage != nil {
-			//packet data and send to chan
-			wsMsg := WebSocketMessage{
-				MessageType: messageType,
-				Message: message,
-			}
-			f.cbForReadMessage(&wsMsg)
-		}
-	}
-}
+//func (f *OneWSClient) runMainProcess() {
+//	var (
+//		//heartTicker = time.NewTicker(time.Second * define.ClientHeartBeatRate)
+//		writeMessage WebSocketMessage
+//		isOk                      bool
+//		err                       error
+//		m any = nil
+//	)
+//
+//	//defer
+//	defer func() {
+//		if subErr := recover(); subErr != m {
+//			log.Printf("WebSocketClient:runMainProcess panic, err:%v", subErr)
+//		}
+//		//stop and close
+//		f.connLocker.Lock()
+//		defer f.connLocker.Unlock()
+//		//heartTicker.Stop()
+//		if f.conn != nil {
+//			f.conn.Close()
+//			f.conn = nil
+//		}
+//		f.isConnecting = false
+//	}()
+//
+//	//setup ticker func
+//	heatBeatTicker := func() {
+//		sf := func() {
+//			if f.heartBeatRate > 0 && f.heartBeatChan != nil {
+//				f.heartBeatChan <- struct{}{}
+//			}
+//		}
+//		if f.heartBeatRate > 0 {
+//			duration := time.Duration(f.heartBeatRate) * time.Second
+//			time.AfterFunc(duration, sf)
+//		}
+//	}
+//
+//	//main loop
+//	//log.Printf("WebSocketClient:runMainProcess start\n")
+//	for {
+//		select {
+//		case writeMessage, isOk = <- f.writeChan:
+//			if isOk {
+//				//write message
+//				err = f.conn.WriteMessage(f.msgType, writeMessage.Message)
+//				if err != nil {
+//					log.Printf("WebSocketClient:runMainProcess write failed, err:%v", err)
+//					if err == io.EOF {
+//						return
+//					}
+//					if errors.Is(err, syscall.EPIPE) {
+//						log.Printf("WebSocketClient:runMainProcess write failed, broken pipe error\n")
+//						f.autoConnect()
+//						return
+//					}
+//				}
+//			}
+//		case <- f.closeChan:
+//			{
+//				return
+//			}
+//		case <- f.interrupt:
+//			{
+//				err = f.conn.WriteMessage(
+//					websocket.CloseMessage,
+//					websocket.FormatCloseMessage(
+//						websocket.CloseNormalClosure,
+//						"",
+//					),
+//				)
+//				if err != nil {
+//					log.Printf("WebSocketClient:runMainProcess write closed, err:%v", err)
+//					return
+//				}
+//			}
+//		case <- f.heartBeatChan:
+//			{
+//				//heart beat
+//				f.heartBeat()
+//
+//				//send next ticker
+//				heatBeatTicker()
+//			}
+//		}
+//	}
+//}
+//
+////read message from remote server
+//func (f *OneWSClient) readMessageFromServer() {
+//	var (
+//		messageType int
+//		message []byte
+//		err error
+//		m any = nil
+//	)
+//
+//	//defer
+//	defer func() {
+//		if subErr := recover(); subErr != m {
+//			log.Printf("WebSocketClient:readMessageFromServer panic, err:%v", subErr)
+//		}
+//	}()
+//
+//	//loop receive message
+//	//log.Printf("WebSocketClient:readMessageFromServer start\n")
+//	for {
+//		//check
+//		if f.conn == nil {
+//			//log.Printf("WebSocketClient:readMessageFromServer connect is nil\n")
+//			return
+//		}
+//		if f.forceClosed {
+//			return
+//		}
+//
+//		//read original message
+//		messageType, message, err = f.conn.ReadMessage()
+//		if err != nil {
+//			//log.Printf("WebSocketClient:readMessageFromServer failed, connId:%v, err:%v",
+//			//	f.connId, err.Error())
+//			if errors.Is(err, syscall.EPIPE) {
+//				//log.Printf("WebSocketClient:readMessageFromServer write failed, broken pipe error\n")
+//				log.Printf("WebSocketClient:readMessageFromServer broken pipe error\n")
+//				f.autoConnect()
+//				return
+//			}
+//			if err == io.EOF {
+//				log.Printf("WebSocketClient:readMessageFromServer EOF\n")
+//				return
+//			}
+//			if err == websocket.ErrCloseSent {
+//				log.Printf("WebSocketClient:readMessageFromServer ErrCloseSent\n")
+//				return
+//			}
+//		}
+//
+//		//call cb for read message
+//		if f.cbForReadMessage != nil {
+//			//packet data and send to chan
+//			wsMsg := WebSocketMessage{
+//				MessageType: messageType,
+//				Message: message,
+//			}
+//			f.cbForReadMessage(&wsMsg)
+//		}
+//	}
+//}

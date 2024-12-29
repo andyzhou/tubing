@@ -7,6 +7,8 @@ github.com/andyzhou/tinylib v0.0.0-20240703022329-951a78a9b059 h1:gZxdrXYfzlkTuP
 github.com/andyzhou/tinylib v0.0.0-20240703022329-951a78a9b059/go.mod h1:YKvZB0RhvbGcDkErvI5Ul5ZdnMUwLnNuyfFlBNYADT8=
 github.com/andyzhou/tinylib v0.0.0-20241002123948-d2b6b7ea44ba h1:8skfo6kuMdfR6HUintkF8NXPbkmuxfWc7FGyuwZ3iGA=
 github.com/andyzhou/tinylib v0.0.0-20241002123948-d2b6b7ea44ba/go.mod h1:6OE/psY8sbDadd2r3GD/ZqD+8iJJAYJeD3Hz1TYKFFA=
+github.com/andyzhou/tinylib v0.0.0-20241228123000-c07db4d1b844 h1:GoPJby09iHCt+sT7D1Q5uTrAEwX0A1EcAPl/8dyPHFU=
+github.com/andyzhou/tinylib v0.0.0-20241228123000-c07db4d1b844/go.mod h1:6OE/psY8sbDadd2r3GD/ZqD+8iJJAYJeD3Hz1TYKFFA=
 github.com/bytedance/sonic v1.5.0/go.mod h1:ED5hyg4y6t3/9Ku1R6dU/4KyJ48DZ4jPhfY1O2AihPM=
 github.com/bytedance/sonic v1.9.1 h1:6iJ6NqdoxCDr6mbY8h18oSO+cShGSMRGCEo7F2h0x8s=
 github.com/bytedance/sonic v1.9.1/go.mod h1:i736AoUSYt75HyZLoJW9ERYxcy6eaN6h4BZXU064P/U=

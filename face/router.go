@@ -37,7 +37,7 @@ type (
 //router info
 type Router struct {
 	rc          *RouterCfg //reference cfg
-	connManager IConnManager
+	connManager IManager
 	cd          ICoder
 	upGrader    websocket.Upgrader //ws up grader
 
@@ -65,7 +65,7 @@ func NewRouter(rc *RouterCfg) *Router {
 		rc.ReadByteRate = define.DefaultReadDataRate
 	}
 
-	//setup upgrade
+	//setup http upgrade
 	//up grader for http -> websocket
 	upGrader := websocket.Upgrader{
 		ReadBufferSize:    define.DefaultBuffSize,
@@ -243,7 +243,7 @@ func (f *Router) Entry(ctx *gin.Context) {
 }
 
 //get connect manager
-func (f *Router) GetManager() IConnManager {
+func (f *Router) GetManager() IManager {
 	return f.connManager
 }
 

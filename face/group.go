@@ -91,6 +91,7 @@ func (f *Group) Join(conn IWSConn) error {
 	//sync into map with locker
 	f.Lock()
 	defer f.Unlock()
+	conn.SetGroupId(f.groupId)
 	f.connMap[conn.GetConnId()] = conn
 	return nil
 }

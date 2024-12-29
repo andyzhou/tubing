@@ -20,7 +20,7 @@ type IRouter interface {
 
 	//get opt
 	GetUriPara(name string, ctx *gin.Context) string
-	GetManager() IConnManager
+	GetManager() IManager
 	GetCoder() ICoder
 	GetName() string
 	GetConf() *RouterCfg
@@ -34,7 +34,7 @@ type IRouter interface {
 
 //interface of manager
 //one router, one manager
-type IConnManager interface {
+type IManager interface {
 	//for message
 	Quit()
 	SendMessage(para *define.SendMsgPara) error
@@ -60,6 +60,10 @@ type IConnManager interface {
 	//cb opt
 	SetCBForReadMessage(cb func(string, int64, IWSConn, int, []byte, *gin.Context) error)
 	SetCBForConnClosed(cb func(string, int64, IWSConn, *gin.Context) error)
+
+	//for base
+	GetRouter() IRouter
+	GetRemote() IRemote
 }
 
 //interface of remote
@@ -110,6 +114,10 @@ type IWSConn interface {
 	GetContext() *gin.Context
 	GetRemoteAddr() string
 	ConnIsActive(checkRates ...int) bool
+
+	//group id
+	GetGroupId() int64
+	SetGroupId(groupId int64)
 
 	//tags
 	GetTags() map[string]bool

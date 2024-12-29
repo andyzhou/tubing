@@ -26,9 +26,10 @@ import (
 type Bucket struct {
 	//inter obj
 	bucketId          int
-	msgType           int           //reference from router
-	router            IRouter       //reference from outside
-	remote            IRemote       //reference from manager
+	msgType           int           //copy from out side
+	router            IRouter       //reference router
+	remote            IRemote       //reference of remote
+	manager 		  IManager		//reference of manager
 	activeCheckTicker *queue.Ticker //ticker for check active connect
 	readMsgTicker     *queue.Ticker //ticker for read connect msg
 	sendMsgQueue      *queue.List   //inter queue list for send message
@@ -45,11 +46,12 @@ type Bucket struct {
 }
 
 //construct
-func NewBucket(id int, router IRouter, remote IRemote) *Bucket {
+func NewBucket(id int, manager IManager) *Bucket {
 	this := &Bucket{
 		bucketId: id,
-		router: router,
-		remote: remote,
+		router: manager.GetRouter(),
+		remote: manager.GetRemote(),
+		manager: manager,
 		connMap: map[int64]IWSConn{},
 		connRemoteMap: map[string]int64{},
 	}
@@ -66,6 +68,7 @@ func (f *Bucket) Quit() {
 	if f.activeCheckTicker != nil {
 		f.activeCheckTicker.Quit()
 	}
+
 	//free memory
 	f.freeRunMemory()
 }
@@ -184,6 +187,9 @@ func (f *Bucket) CloseConnect(connIds ...int64) (map[int64]string, error) {
 			continue
 		}
 
+		//reset group id
+		f.resetConnGroupId(conn)
+
 		//connect close
 		conn.Close()
 
@@ -233,12 +239,33 @@ func (f *Bucket) AddConnect(conn IWSConn) error {
 //private func
 ///////////////
 
+//reset conn group id
+func (f *Bucket) resetConnGroupId(conn IWSConn) error {
+	//check
+	if conn == nil {
+		return errors.New("invalid parameter")
+	}
+
+	//check group id
+	if conn.GetGroupId() > 0 {
+		group, _ := f.manager.GetGroup(conn.GetGroupId())
+		if group != nil {
+			group.Quit(conn.GetConnId())
+		}
+		conn.SetGroupId(0)
+	}
+	return nil
+}
+
 //close connect
 func (f *Bucket) closeConnect(conn IWSConn) error {
 	//check
 	if conn == nil {
 		return errors.New("invalid parameter")
 	}
+
+	//reset group id
+	f.resetConnGroupId(conn)
 
 	//close ws connect
 	err := conn.Close()
@@ -276,7 +303,6 @@ func (f *Bucket) cbForReadConnData() error {
 	//loop read connect data with locker
 	f.Lock()
 	defer f.Unlock()
-	hasCloseOpt := false
 	for connId, conn := range f.connMap {
 		//check connect
 		if connId <= 0 || conn == nil {
@@ -286,6 +312,9 @@ func (f *Bucket) cbForReadConnData() error {
 		if !subOk || connObj == nil {
 			continue
 		}
+
+		//check group id
+		//todo...
 
 		//read message
 		messageType, message, err = connObj.Read()
@@ -308,7 +337,6 @@ func (f *Bucket) cbForReadConnData() error {
 
 			//close connect and remove it
 			connObj.Close()
-			hasCloseOpt = true
 			continue
 		}
 		if bytes.Compare(f.router.GetHeartByte(), message) == 0 {
@@ -321,11 +349,6 @@ func (f *Bucket) cbForReadConnData() error {
 		if f.cbForReadMessage != nil {
 			f.cbForReadMessage(f.router.GetName(), connId, conn, messageType, message, connObj.GetContext())
 		}
-	}
-
-	//check gc or not
-	if hasCloseOpt && f.connCount <= 0 {
-		f.freeRunMemory()
 	}
 	return err
 }
