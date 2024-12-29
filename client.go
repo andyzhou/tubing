@@ -291,6 +291,10 @@ func (f *WebSocketClient) cbForConsumerOpt() error {
 		//read message from server
 		messageType, message, err = ows.readServerMessage()
 		if err != nil {
+			if errors.Is(err, syscall.EPIPE) {
+				//reconnect client
+				ows.autoConnect()
+			}
 			continue
 		}
 		if messageType >= 0 && f.cbForReadMessage != nil {

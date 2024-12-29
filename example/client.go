@@ -11,8 +11,8 @@ import (
 
 //read message
 func readMessage(message *tubing.WebSocketMessage) error {
-	log.Printf("readMessage, session:%v, message:%v\n",
-		message.MessageType, string(message.Message))
+	//log.Printf("readMessage, session:%v, message:%v\n",
+	//	message.MessageType, string(message.Message))
 	return nil
 }
 
@@ -50,14 +50,14 @@ func sendHeartBeat(c *tubing.OneWSClient) {
 }
 
 func cbForReadMessage(connId int64, messageType int, message []byte) error {
-	log.Printf("cbForReadMessage, connId:%v, messageType:%v, message:%v\n", connId, messageType, message)
+	//log.Printf("cbForReadMessage, connId:%v, messageType:%v, message:%v\n", connId, messageType, message)
 	return nil
 }
 
 func main() {
 	var (
 		wg sync.WaitGroup
-		clients = 64
+		clients = 128
 	)
 
 	//init conn para

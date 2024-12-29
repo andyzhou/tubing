@@ -102,8 +102,8 @@ func cbForRead(
 	if tb == nil {
 		return errors.New("tb not init yet")
 	}
-	log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
-		connId, messageType, string(message))
+	//log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
+	//	connId, messageType, string(message))
 
 	//defer opt
 	defer func() {
