@@ -57,6 +57,7 @@ function chat_server_login(userId, userNick) {
     genOpt.kind = "login"
     genOpt.jsonObj = loginObj
 
+    //format json string
     var jsonStr = JSON.stringify(genOpt);
 
     //send login object to server
@@ -96,7 +97,7 @@ function chat_server_message(message) {
     var isJson = isJsonStr(message)
     var finalMessage = "";
     if(isJson) {
-        console.log("message:"+message)
+        console.log("chat_server_message, org message:"+message)
         //try parse json data
         var dataObj = JSON.parse(message);
         if(typeof(dataObj) != "undefined" && dataObj != null) {
@@ -110,6 +111,8 @@ function chat_server_message(message) {
         //not json data, just display message
         finalMessage = message
     }
+
+    console.log("chat_server_message, orgMsg:"+message+", finalMessage:"+finalMessage);
 
     //delay scroll to div bottom
     clearTimeout(delay);

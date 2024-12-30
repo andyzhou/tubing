@@ -20,27 +20,27 @@ import (
 
 //global variable
 var (
-	_tb *Server
+	_tb     *Server
 	_tbOnce sync.Once
 )
 
 //info for router cb
 type UriRouter struct {
 	//base
-	RouterName string
-	RouterUri string
-	MsgType int
-	Buckets int //inter buckets size
-	BuffSize int //read and write buffer size
-	ReadByteRate float64 //if 0 will use default value
-	CheckActiveRate int //if 0 means not need check
+	RouterName       string
+	RouterUri        string
+	MsgType          int
+	Buckets          int     //inter buckets size
+	BuffSize         int     //read and write buffer size
+	ReadByteRate     float64 //if 0 will use default value
+	CheckActiveRate  int     //if 0 means not need check
 	MaxActiveSeconds int
 
 	//relate cb func
 	CBForGenConnId func() int64
 	CBForConnected func(routerName string, connId int64, conn face.IWSConn, ctx *gin.Context) error
-	CBForClosed func(routerName string, connId int64, conn face.IWSConn, ctx *gin.Context) error
-	CBForRead func(routerName string, connId int64, conn face.IWSConn, messageType int, message []byte, ctx *gin.Context) error
+	CBForClosed    func(routerName string, connId int64, conn face.IWSConn, ctx *gin.Context) error
+	CBForRead      func(routerName string, connId int64, conn face.IWSConn, messageType int, message []byte, ctx *gin.Context) error
 }
 
 //face info
@@ -316,13 +316,13 @@ func (f *Server) RegisterUri(ur *UriRouter, methods ...string) error {
 
 	//setup router inter cfg
 	rc := &face.RouterCfg{
-		Name: ur.RouterName,
-		Uri: ur.RouterUri,
-		MsgType: ur.MsgType,
-		Buckets: ur.Buckets,
-		BufferSize: ur.BuffSize,
-		ReadByteRate: ur.ReadByteRate,
-		CheckActiveRate: ur.CheckActiveRate,
+		Name:             ur.RouterName,
+		Uri:              ur.RouterUri,
+		MsgType:          ur.MsgType,
+		Buckets:          ur.Buckets,
+		BufferSize:       ur.BuffSize,
+		ReadByteRate:     ur.ReadByteRate,
+		CheckActiveRate:  ur.CheckActiveRate,
 		MaxActiveSeconds: ur.MaxActiveSeconds,
 	}
 

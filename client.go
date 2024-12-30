@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/andyzhou/tinylib/queue"
 	"github.com/andyzhou/tubing/base"
 	"github.com/andyzhou/tubing/define"
 	"github.com/gorilla/websocket"
@@ -46,7 +45,7 @@ type WebSocketConnPara struct {
 	ReadTimeout float64                // xx seconds
 	QueryPara   map[string]interface{} //raw query, key -> val
 	//cb func
-	CBForReadMessage func(message *WebSocketMessage) error
+	CBForReadMessage func(int64, int, []byte) error
 }
 
 //client info
@@ -65,10 +64,10 @@ type OneWSClient struct {
 	isConnecting  bool
 	forceClosed   bool
 	autoConn      bool //auto connect server switch
-	connLocker    sync.RWMutex
+	//connLocker    sync.RWMutex
 
 	//cb func
-	cbForReadMessage func(message *WebSocketMessage) error
+	cbForReadMessage func(int64, int, []byte) error
 	cbForClosed      func() error
 	base.Util
 	sync.RWMutex
@@ -81,7 +80,6 @@ type WebSocketClient struct {
 	autoConnect    bool
 	connId         int64                  //atomic, maybe not same with server side
 	clientMap      map[int64]*OneWSClient //connectId -> OneWSClient, c2s
-	consumerTicker *queue.Ticker
 
 	//cb setup
 	cbForReadMessage func(int64, int, []byte) error
@@ -98,26 +96,23 @@ func GetWSClient() *WebSocketClient {
 
 //construct
 //consumeRates used for consume ticker rate
-func NewWebSocketClient(consumeRates ...float64) *WebSocketClient {
+func NewWebSocketClient(msgTypes ...int) *WebSocketClient {
 	var (
-		consumeRate float64
+		msgType int
 	)
-
-	//detect consume rate
-	if consumeRates != nil && len(consumeRates) > 0 {
-		consumeRate = consumeRates[0]
+	//setup message type
+	if msgTypes != nil && len(msgTypes) > 0 {
+		msgType = msgTypes[0]
 	}
-	if consumeRate <= 0 {
-		consumeRate = define.DefaultConnectTicker
+	if msgType < define.MessageTypeOfJson || msgType > define.MessageTypeOfOctet {
+		msgType = define.MessageTypeOfJson
 	}
 
 	//self init
 	this := &WebSocketClient{
-		messageType: define.MessageTypeOfOctet,
+		messageType: msgType,
 		clientMap: map[int64]*OneWSClient{},
-		consumerTicker: queue.NewTicker(consumeRate),
 	}
-	this.interInit()
 	return this
 }
 
@@ -271,44 +266,6 @@ func (f *WebSocketClient) getOneWSClient(connId int64) *OneWSClient {
 	return v
 }
 
-//cb for new client dial ticker
-func (f *WebSocketClient) cbForConsumerOpt() error {
-	var (
-		messageType int
-		message []byte
-		err error
-	)
-	//check
-	if len(f.clientMap) <= 0 {
-		return errors.New("no any client connect")
-	}
-
-	//loop check with locker
-	for connId, ows := range f.clientMap {
-		if ows == nil {
-			continue
-		}
-		//read message from server
-		messageType, message, err = ows.readServerMessage()
-		if err != nil {
-			if errors.Is(err, syscall.EPIPE) {
-				//reconnect client
-				ows.autoConnect()
-			}
-			continue
-		}
-		if messageType >= 0 && f.cbForReadMessage != nil {
-			f.cbForReadMessage(connId, messageType, message)
-		}
-	}
-	return nil
-}
-
-//inter init
-func (f *WebSocketClient) interInit() {
-	f.consumerTicker.SetCheckerCallback(f.cbForConsumerOpt)
-}
-
 //////////////////////
 //api for oneWSClient
 /////////////////////
@@ -390,8 +347,6 @@ func (f *OneWSClient) SendMessage(message[]byte) error {
 	}
 
 	//opt with locker
-	f.connLocker.Lock()
-	defer f.connLocker.Unlock()
 	if f.conn == nil {
 		if !f.isConnecting {
 			f.autoConnect()
@@ -510,11 +465,41 @@ func (f *OneWSClient) dialServer() error {
 	}
 
 	//sync connect
-	f.connLocker.Lock()
-	defer f.connLocker.Unlock()
 	f.conn = conn
 	f.isConnecting = false
+
+	//spawn read server message process
+	go f.receiveServerMessage()
 	return nil
+}
+
+//receive server message process
+func (f *OneWSClient) receiveServerMessage() {
+	var (
+		msgType int
+		msgData []byte
+		err error
+		m any = nil
+	)
+	//defer panic
+	defer func() {
+		if p := recover(); p != m {
+			log.Printf("OneWSClient, connId:%v, err:%v\n", f.connId, p)
+		}
+	}()
+
+	//loop
+	for {
+		msgType, msgData, err = f.readServerMessage()
+		//log.Printf("OneWSClient, connId:%v, data:%v, err:%v\n", f.connId, data, err)
+		if err != nil {
+			break
+		}
+		if f.cbForReadMessage != nil {
+			//call cb for read message
+			f.cbForReadMessage(f.connId, msgType, msgData)
+		}
+	}
 }
 
 //heart beat
@@ -527,6 +512,7 @@ func (f *OneWSClient) heartBeat() error {
 }
 
 //read message from server side
+//return msgType, msgData, error
 func (f *OneWSClient) readServerMessage() (int, []byte, error) {
 	//check
 	if f.conn == nil || f.forceClosed {
@@ -540,7 +526,7 @@ func (f *OneWSClient) readServerMessage() (int, []byte, error) {
 	}
 
 	//read original message
-	f.conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout * float64(time.Second))))
+	//f.conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout * float64(time.Second))))
 	messageType, message, err := f.conn.ReadMessage()
 	if err != nil {
 		if errors.Is(err, syscall.EPIPE) {
@@ -550,15 +536,15 @@ func (f *OneWSClient) readServerMessage() (int, []byte, error) {
 		}
 	}
 
-	//call cb for read message
-	if messageType >= 0 && f.cbForReadMessage != nil {
-		//packet data and send to chan
-		wsMsg := WebSocketMessage{
-			MessageType: messageType,
-			Message: message,
-		}
-		f.cbForReadMessage(&wsMsg)
-	}
+	////call cb for read message
+	//if messageType >= 0 && f.cbForReadMessage != nil {
+	//	//packet data and send to chan
+	//	wsMsg := WebSocketMessage{
+	//		MessageType: messageType,
+	//		Message: message,
+	//	}
+	//	f.cbForReadMessage(&wsMsg)
+	//}
 
 	return messageType, message, nil
 }

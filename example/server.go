@@ -21,7 +21,7 @@ import (
 const (
 	RouterName = "test"
 	RouterUri  = "/ws"
-	Buckets = 3
+	Buckets = 1
 	ServerPort = 8090
 )
 
@@ -51,7 +51,7 @@ func cbForConnected(
 	connId int64,
 	conn face.IWSConn,
 	ctx *gin.Context) error {
-	log.Printf("cbForConnected, connId:%v\n", connId)
+	//log.Printf("cbForConnected, connId:%v\n", connId)
 
 	//get para
 	//namePara := tubing.GetServer().GetPara("name", ctx)
@@ -66,12 +66,7 @@ func cbForConnected(
 		return errors.New("invalid router name")
 	}
 
-	//cast welcome message
-	//conn, subErr := router.GetManager().GetConn(connId)
-	//if subErr != nil || conn == nil {
-	//	log.Printf("cbForConnected, connId:%v, get conn failed, err:%v\n", connId, subErr)
-	//	return subErr
-	//}
+	//reply welcome message
 	messageType := define.MessageTypeOfJson
 	message := []byte("welcome you!")
 	err = conn.Write(messageType, message)
@@ -87,7 +82,7 @@ func cbForClosed(
 	connId int64,
 	conn face.IWSConn,
 	ctx *gin.Context) error {
-	log.Printf("cbForClosed, connId:%v\n", connId)
+	//log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
 
@@ -103,16 +98,7 @@ func cbForRead(
 		return errors.New("tb not init yet")
 	}
 	//log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
-	//	connId, messageType, string(message))
-
-	//defer opt
-	defer func() {
-		//send reply
-		err := conn.Write(messageType, message)
-		if err != nil {
-			log.Printf("cbForRead failed, err:%v\n", err.Error())
-		}
-	}()
+	//			connId, messageType, string(message))
 
 	//decode message
 	messageObj := json.NewMessageJson()
@@ -135,16 +121,16 @@ func cbForRead(
 	case eDefine.MsgKindOfLogin:
 		{
 			//user login
-			log.Printf("user login, conn id:%v\n", connId)
-
 			//decode login obj
 			genObjMap, _ := messageObj.JsonObj.(map[string]interface{})
 			jsonObjByte, _ := messageObj.EncodeSimple(genObjMap)
 			loginObj := json.NewLoginJson()
 			loginObj.Decode(jsonObjByte, loginObj)
 
+			log.Printf("user login, conn id:%v, userId:%v, userNick:%v\n",
+				connId, loginObj.Id, loginObj.Nick)
+
 			//set conn property
-			//conn, _ := router.GetManager().GetConn(connId)
 			if conn != nil && loginObj != nil {
 				conn.SetProp(eDefine.PropNameOfUserId, loginObj.Id)
 				conn.SetProp(eDefine.PropNameOfUserNick, loginObj.Nick)
@@ -154,8 +140,6 @@ func cbForRead(
 	case eDefine.MsgKindOfChat:
 		{
 			//chat message
-			log.Printf("user chat, conn id:%v\n", connId)
-
 			//decode message obj
 			genObjMap, _ := messageObj.JsonObj.(map[string]interface{})
 			jsonObjByte, _ := messageObj.EncodeSimple(genObjMap)
@@ -171,6 +155,9 @@ func cbForRead(
 					chatObj.Sender = userNickStr
 				}
 				newChatBytes, _ := chatObj.Encode(chatObj)
+
+				log.Printf("user chat, conn id:%v, sender:%v, msg:%v\n",
+					connId, chatObj.Sender, chatObj.Message)
 
 				//setup send msg para
 				sendMsgPara := &define.SendMsgPara{
@@ -258,7 +245,7 @@ func startApp(c *cli.Context) error {
 		Buckets: Buckets,
 		MsgType: define.MessageTypeOfJson,
 		ReadByteRate: 0.1, //xx seconds
-		CheckActiveRate: 2, //2 seconds
+		//CheckActiveRate: 300, //xx seconds
 		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,
 		CBForRead: cbForRead,

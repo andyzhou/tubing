@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"log"
+	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -30,6 +31,7 @@ type Bucket struct {
 	router            IRouter       //reference router
 	remote            IRemote       //reference of remote
 	manager 		  IManager		//reference of manager
+
 	activeCheckTicker *queue.Ticker //ticker for check active connect
 	readMsgTicker     *queue.Ticker //ticker for read connect msg
 	sendMsgQueue      *queue.List   //inter queue list for send message
@@ -73,9 +75,25 @@ func (f *Bucket) Quit() {
 	f.freeRunMemory()
 }
 
-//////////////////
-//api for cb func
-//////////////////
+//get router reference
+func (f *Bucket) GetRouter() IRouter {
+	return f.router
+}
+
+//get remote reference
+func (f *Bucket) GetRemote() IRemote {
+	return f.remote
+}
+
+//get read message callback
+func (f *Bucket) GetReadMessageCB() func(string, int64, IWSConn, int, []byte, *gin.Context) error {
+	return f.cbForReadMessage
+}
+
+//get conn closed callback
+func (f *Bucket) GetConnClosedCB() func(string, int64, IWSConn, *gin.Context) error {
+	return f.cbForConnClosed
+}
 
 //set cb for read message, step-1-1
 //cb func(routeName, connectId, msgType, msgData) error
@@ -109,12 +127,15 @@ func (f *Bucket) SendMessage(para *define.SendMsgPara) error {
 	if para == nil || para.Msg == nil {
 		return errors.New("invalid parameter")
 	}
-	if f.sendMsgQueue == nil {
-		return errors.New("inter send message queue is nil")
-	}
 
-	//save into running queue
-	err := f.sendMsgQueue.Push(para)
+	//consume send data
+	err := f.cbForConsumerSendData(para)
+
+	//if f.sendMsgQueue == nil {
+	//	return errors.New("inter send message queue is nil")
+	//}
+	////save into running queue
+	//err := f.sendMsgQueue.Push(para)
 	return err
 }
 
@@ -135,10 +156,39 @@ func (f *Bucket) GetConnect(connId int64) (IWSConn, error) {
 	}
 
 	//get ws conn by id
-	f.Lock()
-	defer f.Unlock()
+	//f.Lock()
+	//defer f.Unlock()
 	v, _ := f.connMap[connId]
 	return v, nil
+}
+
+//close conn obj
+func (f *Bucket) CloseConn(conn IWSConn) error {
+	//check
+	if conn == nil {
+		return errors.New("invalid parameter")
+	}
+
+	//defer connect close
+	defer func() {
+		conn.Close()
+	}()
+
+
+	//get conn id
+	connId := conn.GetConnId()
+
+	//reset group id
+	f.resetConnGroupId(conn)
+	//run env data clean
+	remoteAddr := conn.GetRemoteAddr()
+	if remoteAddr != "" {
+		delete(f.connRemoteMap, remoteAddr)
+	}
+	delete(f.connMap, connId)
+	atomic.AddInt64(&f.connCount, -1)
+
+	return nil
 }
 
 //close conn with message
@@ -162,22 +212,22 @@ func (f *Bucket) CloseWithMessage(conn *websocket.Conn, message string) error {
 	connId, _ := f.connRemoteMap[remoteAddr]
 	if connId > 0 {
 		//close connect from manager
-		f.CloseConnect(connId)
+		f.CloseConnectByIds(connId)
 	}
 	return nil
 }
 
-//close connect
+//close connect by ids
 //return map[connId]remoteAddr, error
-func (f *Bucket) CloseConnect(connIds ...int64) (map[int64]string, error) {
+func (f *Bucket) CloseConnectByIds(connIds ...int64) (map[int64]string, error) {
 	//check
 	if connIds == nil || len(connIds) <= 0 {
 		return nil, errors.New("invalid parameter")
 	}
 
 	//loop opt with locker
-	f.Lock()
-	defer f.Unlock()
+	//f.Lock()
+	//defer f.Unlock()
 	succeed := 0
 	result := make(map[int64]string)
 	for _, connId := range connIds {
@@ -227,8 +277,8 @@ func (f *Bucket) AddConnect(conn IWSConn) error {
 	remoteAddr := conn.GetRemoteAddr()
 
 	//add into running data
-	f.Lock()
-	defer f.Unlock()
+	//f.Lock()
+	//defer f.Unlock()
 	f.connMap[connectId] = conn
 	f.connRemoteMap[remoteAddr] = connectId
 	atomic.AddInt64(&f.connCount, 1)
@@ -313,12 +363,16 @@ func (f *Bucket) cbForReadConnData() error {
 			continue
 		}
 
-		//check group id
-		//todo...
-
 		//read message
 		messageType, message, err = connObj.Read()
 		if err != nil {
+			//if timeout error, do nothing
+			if e, ok := err.(net.Error); ok && e.Timeout() {
+				//it's a timeout error
+				//log.Printf("conn id %v read time out, err:%v\n", connId, err.Error())
+				continue
+			}
+
 			//call manager api to clean the connect obj
 			if f.remote != nil {
 				remoteAddr := connObj.GetRemoteAddr()
@@ -332,13 +386,12 @@ func (f *Bucket) cbForReadConnData() error {
 				f.cbForConnClosed(f.router.GetName(), connId, conn, connObj.GetContext())
 			}
 
-			//remove from bucket
+			//remove connect from bucket
 			f.closeConnect(conn)
-
-			//close connect and remove it
-			connObj.Close()
 			continue
 		}
+
+		//heart beat data check and opt
 		if bytes.Compare(f.router.GetHeartByte(), message) == 0 {
 			//it's heart beat data
 			connObj.HeartBeat()
@@ -347,7 +400,13 @@ func (f *Bucket) cbForReadConnData() error {
 
 		//check and call read message cb
 		if f.cbForReadMessage != nil {
-			f.cbForReadMessage(f.router.GetName(), connId, conn, messageType, message, connObj.GetContext())
+			err = f.cbForReadMessage(
+				f.router.GetName(),
+				connId,
+				conn,
+				messageType,
+				message,
+				connObj.GetContext())
 		}
 	}
 	return err
@@ -375,6 +434,8 @@ func (f *Bucket) cbForConsumerSendData(data interface{}) error {
 	}
 
 	//loop send
+	f.Lock()
+	defer f.Unlock()
 	for _, v := range f.connMap {
 		//check
 		if v == nil {
@@ -488,8 +549,8 @@ func (f *Bucket) freeRunMemory() {
 //cb for active connect check
 func (f *Bucket) cbForCheckActiveConn() error {
 	succeed := 0
-	f.Lock()
-	defer f.Unlock()
+	//f.Lock()
+	//defer f.Unlock()
 	for _, conn := range f.connMap {
 		isActive := conn.ConnIsActive()
 		if !isActive {
@@ -552,10 +613,10 @@ func (f *Bucket) initActiveConnCheckTicker() {
 //inter init
 func (f *Bucket) interInit() {
 	//init read msg ticker
-	f.initReadMsgTicker()
+	//f.initReadMsgTicker()
 
 	//init send message queue
-	f.initSendMsgConsumer()
+	//f.initSendMsgConsumer()
 
 	//init active conn check ticker
 	f.initActiveConnCheckTicker()

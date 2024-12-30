@@ -80,6 +80,10 @@ type IRemote interface {
 type IBucket interface {
 	//other opt
 	Quit()
+	GetRouter() IRouter
+	GetRemote() IRemote
+	GetReadMessageCB() func(string, int64, IWSConn, int, []byte, *gin.Context) error
+	GetConnClosedCB() func(string, int64, IWSConn, *gin.Context) error
 
 	//opt for message
 	SendMessage(para *define.SendMsgPara) error
@@ -87,7 +91,8 @@ type IBucket interface {
 	//opt for connect
 	GetAllConnect() map[int64]IWSConn
 	GetConnect(connId int64) (IWSConn, error)
-	CloseConnect(connIds ...int64) (map[int64]string, error)
+	CloseConnectByIds(connIds ...int64) (map[int64]string, error)
+	CloseConn(conn IWSConn) error
 	AddConnect(conn IWSConn) error
 
 	//opt for cb func

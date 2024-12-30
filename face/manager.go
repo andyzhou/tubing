@@ -307,7 +307,7 @@ func (f *Manager) CloseWithMessage(
 	}
 
 	//close connect
-	targetBucket.CloseConnect(connId)
+	targetBucket.CloseConnectByIds(connId)
 
 	//delete remote addr
 	err = f.remote.DelRemote(remoteAddr)
@@ -336,7 +336,7 @@ func (f *Manager) CloseConnect(connIds ...int64) error {
 		if err != nil || targetBucket == nil {
 			continue
 		}
-		remoteAddrMap, _ := targetBucket.CloseConnect(connId)
+		remoteAddrMap, _ := targetBucket.CloseConnectByIds(connId)
 		if remoteAddrMap != nil {
 			for _, addr := range remoteAddrMap {
 				f.remote.DelRemote(addr)
@@ -352,14 +352,9 @@ func (f *Manager) Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (
 	if connId <= 0 || conn == nil {
 		return nil, fmt.Errorf("invalid parameter, connid:%v, conn:%v\n", connId, conn)
 	}
-	connRemoteAddr := conn.RemoteAddr().String()
 
-	//init new connect
-	wsConn := NewWSConn(conn, connId, ctx)
-	err := wsConn.SetRemoteAddr(connRemoteAddr)
-	if err != nil {
-		return nil, err
-	}
+	//get conn remote address
+	connRemoteAddr := conn.RemoteAddr().String()
 
 	//pick target bucket by connect id
 	targetBucketId := int(connId % int64(f.buckets))
@@ -368,8 +363,12 @@ func (f *Manager) Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (
 		return nil, subErr
 	}
 
+	//init new connect
+	wsConn := NewWSConn(targetBucket, connId, conn, ctx)
+	wsConn.SetRemoteAddr(connRemoteAddr)
+
 	//add remote addr
-	err = f.remote.AddRemote(connRemoteAddr, connId)
+	err := f.remote.AddRemote(connRemoteAddr, connId)
 
 	//add new ws connect on target bucket
 	err = targetBucket.AddConnect(wsConn)

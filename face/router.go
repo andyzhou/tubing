@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"time"
 
 	"github.com/andyzhou/tubing/define"
 	"github.com/gin-gonic/gin"
@@ -227,19 +228,22 @@ func (f *Router) Entry(ctx *gin.Context) {
 		return
 	}
 
-	//cb connect
-	if f.cbForConnected != nil {
-		err = f.cbForConnected(f.rc.Name, newConnId, wsConn, ctx)
-		if err != nil {
-			log.Printf("Router:Entry, cbForConnected err:%v\n", err.Error())
-			//call cb connected failed, force close connect
-			f.connManager.CloseWithMessage(conn, err.Error())
-			if f.cbForClosed != nil {
-				f.cbForClosed(f.rc.Name, newConnId, wsConn, ctx)
+	//cb connect, delay opt for spawn new connect init
+	df := func() {
+		if f.cbForConnected != nil {
+			err = f.cbForConnected(f.rc.Name, newConnId, wsConn, ctx)
+			if err != nil {
+				log.Printf("Router:Entry, cbForConnected err:%v\n", err.Error())
+				//call cb connected failed, force close connect
+				f.connManager.CloseWithMessage(conn, err.Error())
+				if f.cbForClosed != nil {
+					f.cbForClosed(f.rc.Name, newConnId, wsConn, ctx)
+				}
+				return
 			}
-			return
 		}
 	}
+	time.AfterFunc(time.Second/10, df)
 }
 
 //get connect manager

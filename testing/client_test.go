@@ -32,7 +32,7 @@ func init() {
 }
 
 //read message
-func readMessage(message *tubing.WebSocketMessage) error {
+func readMessage(connId int64, messageType int, message []byte) error {
 	//log.Printf("readMessage, session:%v, message:%v\n",
 	//	message.MessageType,
 	//	string(message.Message))

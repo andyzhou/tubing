@@ -9,10 +9,9 @@ import (
 	"time"
 )
 
-//read message
-func readMessage(message *tubing.WebSocketMessage) error {
-	//log.Printf("readMessage, session:%v, message:%v\n",
-	//	message.MessageType, string(message.Message))
+//cb for read message from server side
+func cbForReadMessage(connId int64, messageType int, message []byte) error {
+	log.Printf("cbForReadMessage, connId:%v, messageType:%v, message:%v\n", connId, messageType, message)
 	return nil
 }
 
@@ -26,7 +25,7 @@ func sendMessage(c *tubing.OneWSClient) {
 		message := []byte(fmt.Sprintf("hello %v", time.Now().Unix()))
 		err := c.SendMessage(message)
 		if err != nil {
-			log.Printf("sendMessage, err:%v\n", err.Error())
+			log.Printf("sendMessage, err:%v\n", err)
 		}
 		time.Sleep(time.Second/10)
 	}
@@ -49,11 +48,6 @@ func sendHeartBeat(c *tubing.OneWSClient) {
 	}
 }
 
-func cbForReadMessage(connId int64, messageType int, message []byte) error {
-	//log.Printf("cbForReadMessage, connId:%v, messageType:%v, message:%v\n", connId, messageType, message)
-	return nil
-}
-
 func main() {
 	var (
 		wg sync.WaitGroup
@@ -65,7 +59,7 @@ func main() {
 		Host: "127.0.0.1",
 		Port: 8090,
 		Uri: "/ws",
-		CBForReadMessage: readMessage,
+		CBForReadMessage: cbForReadMessage,
 	}
 
 	//init client
