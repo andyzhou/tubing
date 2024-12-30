@@ -46,7 +46,7 @@ func NewWSConn(bucket IBucket, connId int64, conn *websocket.Conn, ctx *gin.Cont
 		propMap: map[string]interface{}{},
 		tagMap: map[string]bool{},
 	}
-	go this.readDataProcess()
+	go this.readClientDataProcess()
 	return this
 }
 
@@ -310,7 +310,7 @@ func (f *WSConn) Read() (int, []byte, error) {
 		return 0, nil, errors.New("invalid ws connect")
 	}
 
-	//read message with locker
+	//read message
 	//f.Lock()
 	//defer f.Unlock()
 	//f.conn.SetReadDeadline(time.Now().Add(time.Duration(float64(time.Second))))
@@ -362,13 +362,6 @@ func (f *WSConn) readOneMessageData() error {
 		atomic.StoreInt64(&f.activeTime, time.Now().Unix())
 	}()
 
-	////heart beat data check and opt
-	//if bytes.Compare(f.router.GetHeartByte(), message) == 0 {
-	//	//it's heart beat data
-	//	connObj.HeartBeat()
-	//	continue
-	//}
-
 	//check and call read message cb
 	//the err from cb side will skipped!
 	cbForReadMessage := f.bucket.GetReadMessageCB()
@@ -384,9 +377,9 @@ func (f *WSConn) readOneMessageData() error {
 	return err
 }
 
-//read data process
+//read client data process
 //all data from client side
-func (f *WSConn) readDataProcess() {
+func (f *WSConn) readClientDataProcess() {
 	var (
 		err error
 		m any = nil

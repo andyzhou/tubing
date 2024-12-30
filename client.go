@@ -64,7 +64,6 @@ type OneWSClient struct {
 	isConnecting  bool
 	forceClosed   bool
 	autoConn      bool //auto connect server switch
-	//connLocker    sync.RWMutex
 
 	//cb func
 	cbForReadMessage func(int64, int, []byte) error
@@ -491,7 +490,6 @@ func (f *OneWSClient) receiveServerMessage() {
 	//loop
 	for {
 		msgType, msgData, err = f.readServerMessage()
-		//log.Printf("OneWSClient, connId:%v, data:%v, err:%v\n", f.connId, data, err)
 		if err != nil {
 			break
 		}

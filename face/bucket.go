@@ -67,6 +67,9 @@ func (f *Bucket) Quit() {
 	if f.readMsgTicker != nil {
 		f.readMsgTicker.Quit()
 	}
+	if f.sendMsgQueue != nil {
+		f.sendMsgQueue.Quit()
+	}
 	if f.activeCheckTicker != nil {
 		f.activeCheckTicker.Quit()
 	}
@@ -130,12 +133,6 @@ func (f *Bucket) SendMessage(para *define.SendMsgPara) error {
 
 	//consume send data
 	err := f.cbForConsumerSendData(para)
-
-	//if f.sendMsgQueue == nil {
-	//	return errors.New("inter send message queue is nil")
-	//}
-	////save into running queue
-	//err := f.sendMsgQueue.Push(para)
 	return err
 }
 
@@ -180,14 +177,21 @@ func (f *Bucket) CloseConn(conn IWSConn) error {
 
 	//reset group id
 	f.resetConnGroupId(conn)
+
 	//run env data clean
 	remoteAddr := conn.GetRemoteAddr()
 	if remoteAddr != "" {
 		delete(f.connRemoteMap, remoteAddr)
 	}
 	delete(f.connMap, connId)
-	atomic.AddInt64(&f.connCount, -1)
 
+	//update conn count
+	atomic.StoreInt64(&f.connCount, int64(len(f.connMap)))
+
+	//gc opt
+	if f.connCount <= 0 {
+		runtime.GC()
+	}
 	return nil
 }
 
@@ -256,11 +260,8 @@ func (f *Bucket) CloseConnectByIds(connIds ...int64) (map[int64]string, error) {
 
 	//check and run gc
 	if f.connCount <= 0 {
-		f.connMap = map[int64]IWSConn{}
-		f.connRemoteMap = map[string]int64{}
 		atomic.StoreInt64(&f.connCount, 0)
 		runtime.GC()
-		log.Printf("tubing.server.manager.CloseConn, gc opt\n")
 	}
 	return result, nil
 }
@@ -277,8 +278,6 @@ func (f *Bucket) AddConnect(conn IWSConn) error {
 	remoteAddr := conn.GetRemoteAddr()
 
 	//add into running data
-	//f.Lock()
-	//defer f.Unlock()
 	f.connMap[connectId] = conn
 	f.connRemoteMap[remoteAddr] = connectId
 	atomic.AddInt64(&f.connCount, 1)
@@ -433,7 +432,7 @@ func (f *Bucket) cbForConsumerSendData(data interface{}) error {
 		return err
 	}
 
-	//loop send
+	//loop send by filter
 	f.Lock()
 	defer f.Unlock()
 	for _, v := range f.connMap {
@@ -614,7 +613,7 @@ func (f *Bucket) initActiveConnCheckTicker() {
 func (f *Bucket) interInit() {
 	//init read msg ticker
 	//f.initReadMsgTicker()
-
+	//
 	//init send message queue
 	//f.initSendMsgConsumer()
 
