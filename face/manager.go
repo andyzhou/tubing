@@ -114,16 +114,16 @@ func (f *Manager) GetGroup(groupId int64) (IGroup, error) {
 }
 
 //create new group
-func (f *Manager) CreateGroup(groupId int64) error {
+func (f *Manager) CreateGroup(groupId int64) (IGroup, error) {
 	//check
 	if groupId <= 0 {
-		return errors.New("invalid parameter")
+		return nil, errors.New("invalid parameter")
 	}
 
 	//get old group
 	oldGroup, err := f.GetGroup(groupId)
 	if err != nil || oldGroup != nil {
-		return errors.New("group has exists")
+		return oldGroup, errors.New("group has exists")
 	}
 
 	//create new group
@@ -131,7 +131,7 @@ func (f *Manager) CreateGroup(groupId int64) error {
 	defer f.groupLocker.Unlock()
 	newGroup := NewGroup(groupId)
 	f.groupMap[groupId] = newGroup
-	return nil
+	return newGroup, nil
 }
 
 //gen new connect id

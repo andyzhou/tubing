@@ -55,7 +55,7 @@ type IManager interface {
 	//for group
 	RemoveGroup(groupId int64) error
 	GetGroup(groupId int64) (IGroup, error)
-	CreateGroup(groupId int64) error
+	CreateGroup(groupId int64) (IGroup, error)
 
 	//cb opt
 	SetCBForReadMessage(cb func(string, int64, IWSConn, int, []byte, *gin.Context) error)
