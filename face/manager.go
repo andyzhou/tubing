@@ -269,6 +269,18 @@ func (f *Manager) SendMessage(
 		return errors.New("invalid parameter")
 	}
 
+	//send to target group id
+	if para.GroupId > 0 {
+		//get target group
+		group, subErr := f.GetGroup(para.GroupId)
+		if subErr != nil || group == nil {
+			return subErr
+		}
+		//send to target group
+		err = group.SendMessage(f.msgType, para.Msg)
+		return err
+	}
+
 	//send to all buckets
 	for _, v := range f.bucketMap {
 		err = v.SendMessage(para)
@@ -304,6 +316,15 @@ func (f *Manager) CloseWithMessage(
 	targetBucket, subErr := f.GetBucket(targetBucketId)
 	if subErr != nil || targetBucket == nil {
 		return subErr
+	}
+
+	//group opt
+	wsConn, _ := f.GetConn(connId)
+	if wsConn != nil && wsConn.GetGroupId() > 0 {
+		targetGroup, _ := f.GetGroup(wsConn.GetGroupId())
+		if targetGroup != nil {
+			targetGroup.Quit(connId)
+		}
 	}
 
 	//close connect

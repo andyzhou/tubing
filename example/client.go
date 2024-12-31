@@ -11,7 +11,7 @@ import (
 
 //cb for read message from server side
 func cbForReadMessage(connId int64, messageType int, message []byte) error {
-	log.Printf("cbForReadMessage, connId:%v, messageType:%v, message:%v\n", connId, messageType, message)
+	//log.Printf("cbForReadMessage, connId:%v, messageType:%v, message:%v\n", connId, messageType, message)
 	return nil
 }
 

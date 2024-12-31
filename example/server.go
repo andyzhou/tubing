@@ -206,18 +206,21 @@ func createGin(isReleases ...bool) *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	//init default gin and page
-	gin := gin.Default()
+	//init default gin router and page
+	ginRouter := gin.New()
+	if isRelease {
+		ginRouter.Use(gin.Recovery())
+	}
 
 	//init templates
-	gin.LoadHTMLGlob("./tpl/*.tpl")
+	ginRouter.LoadHTMLGlob("./tpl/*.tpl")
 
 	//init static path
-	gin.Static("/html", "./html")
+	ginRouter.Static("/html", "./html")
 
 	//register home request url
-	gin.Any("/", showHomePage)
-	return gin
+	ginRouter.Any("/", showHomePage)
+	return ginRouter
 }
 
 //start app service

@@ -2,7 +2,6 @@ package face
 
 import (
 	"errors"
-	"log"
 	"math/rand"
 	"runtime"
 	"sync"
@@ -67,8 +66,8 @@ func (f *Remote) DelRemote(addr string) error {
 	gcRate := rand.Intn(define.DefaultTenThousandPercent)
 	if gcRate <= define.DefaultGcOptRate || remoteAddrLen <= 0 {
 		runtime.GC()
-		log.Printf("remote.DelRemote, gcRate:%v, remoteAddrLen:%v, gc opt...\n",
-			gcRate, remoteAddrLen)
+		//log.Printf("remote.DelRemote, gcRate:%v, remoteAddrLen:%v, gc opt...\n",
+		//	gcRate, remoteAddrLen)
 	}
 	return nil
 }

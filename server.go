@@ -282,6 +282,7 @@ func (f *Server) StartGin(port int, isReleases ...bool) error {
 	}
 	if isRelease {
 		gin.SetMode(gin.ReleaseMode)
+		f.gin.Use(gin.Recovery())
 	}
 
 	//start server
