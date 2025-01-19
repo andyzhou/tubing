@@ -82,7 +82,7 @@ func cbForClosed(
 	connId int64,
 	conn face.IWSConn,
 	ctx *gin.Context) error {
-	//log.Printf("cbForClosed, connId:%v\n", connId)
+	log.Printf("cbForClosed, connId:%v\n", connId)
 	return nil
 }
 
@@ -97,8 +97,8 @@ func cbForRead(
 	if tb == nil {
 		return errors.New("tb not init yet")
 	}
-	//log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
-	//			connId, messageType, string(message))
+	log.Printf("cbForRead, connId:%v, messageType:%v, message:%v\n",
+				connId, messageType, string(message))
 
 	//decode message
 	messageObj := json.NewMessageJson()
@@ -247,7 +247,7 @@ func startApp(c *cli.Context) error {
 		RouterUri: RouterUri,
 		Buckets: Buckets,
 		MsgType: define.MessageTypeOfJson,
-		ReadByteRate: 0.1, //xx seconds
+		ReadByteRate: 0.01, //xx seconds
 		//CheckActiveRate: 300, //xx seconds
 		CBForConnected: cbForConnected,
 		CBForClosed: cbForClosed,

@@ -176,7 +176,9 @@ func (f *Bucket) CloseConn(conn IWSConn) error {
 	//reset group id
 	f.resetConnGroupId(conn)
 
-	//run env data clean
+	//run env data clean with locker
+	f.Lock()
+	defer f.Unlock()
 	remoteAddr := conn.GetRemoteAddr()
 	if remoteAddr != "" {
 		delete(f.connRemoteMap, remoteAddr)
@@ -275,7 +277,9 @@ func (f *Bucket) AddConnect(conn IWSConn) error {
 	connectId := conn.GetConnId()
 	remoteAddr := conn.GetRemoteAddr()
 
-	//add into running data
+	//add into running data with locker
+	f.Lock()
+	defer f.Unlock()
 	f.connMap[connectId] = conn
 	f.connRemoteMap[remoteAddr] = connectId
 	atomic.AddInt64(&f.connCount, 1)

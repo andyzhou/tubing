@@ -53,6 +53,9 @@ func (f *Group) SendMessage(msgType int, msg []byte) error {
 	f.Lock()
 	defer f.Unlock()
 	for _, conn := range f.connMap {
+		if conn == nil || conn.ConnIsActive() == false {
+			continue
+		}
 		err = conn.Write(msgType, msg)
 	}
 	return err

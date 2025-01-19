@@ -84,6 +84,7 @@ func BenchmarkClient(b *testing.B) {
 
 		//send message
 		wg.Add(1)
+		//time.Sleep(time.Second/50)
 		sendMessage(ws, &wg, b)
 		wsArr = append(wsArr, ws)
 		succeed++
