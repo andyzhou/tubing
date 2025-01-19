@@ -3,7 +3,6 @@ package testing
 import (
 	"fmt"
 	"github.com/andyzhou/tubing"
-	"sync"
 	"testing"
 	"time"
 )
@@ -40,8 +39,8 @@ func readMessage(connId int64, messageType int, message []byte) error {
 }
 
 //write message
-func sendMessage(c *tubing.OneWSClient, wg *sync.WaitGroup, b *testing.B) {
-	defer (*wg).Done()
+func sendMessage(c *tubing.OneWSClient, b *testing.B) {
+	//defer (*wg).Done()
 	if c.IsClosed() {
 		return
 	}
@@ -68,10 +67,7 @@ func TestClient(t *testing.T) {
 }
 
 //benchmark api
-func BenchmarkClient(b *testing.B) {
-	var (
-		wg = sync.WaitGroup{}
-	)
+func BenchmarkClientConn(b *testing.B) {
 	succeed := 0
 	failed := 0
 	wsArr := make([]*tubing.OneWSClient, 0)
@@ -79,26 +75,41 @@ func BenchmarkClient(b *testing.B) {
 		ws, err := createWsClient()
 		if err != nil {
 			failed++
-			break
+		}else{
+			succeed++
+			wsArr = append(wsArr, ws)
 		}
-
-		//send message
-		wg.Add(1)
-		//time.Sleep(time.Second/50)
-		sendMessage(ws, &wg, b)
-		wsArr = append(wsArr, ws)
-		succeed++
 	}
-	b.Logf("benchmark create done, N:%v, succeed:%v, failed:%v\n",
+
+	b.Logf("benchmark client conn done, N:%v, succeed:%v, failed:%v\n",
 		b.N, succeed, failed)
 
-	wg.Wait()
+	//wg.Wait()
 	b.Logf("benchmark, all done, clean up\n")
 
 	//close connect
 	for _, v := range wsArr {
 		v.Quit()
 	}
-	wsArr = []*tubing.OneWSClient{}
+}
+
+func BenchmarkClientSendMsg(b *testing.B) {
+	succeed := 0
+	failed := 0
+
+	//connect server
+	ws, err := createWsClient()
+	if err != nil {
+		panic(any(err))
+	}
+	for i := 0; i < b.N; i++ {
+		sendMessage(ws, b)
+		succeed++
+	}
+	b.Logf("benchmark create done, N:%v, succeed:%v, failed:%v\n",
+		b.N, succeed, failed)
+
+	//wg.Wait()
+	b.Logf("benchmark, all done, clean up\n")
 	return
 }

@@ -171,7 +171,7 @@ func (f *WebSocketClient) CreateClient(connPara *WebSocketConnPara) (*OneWSClien
 	//dial server
 	err := wsc.dialServer()
 	if err != nil {
-		return wsc, nil
+		return nil, err
 	}
 
 	//gen connect id
@@ -207,10 +207,11 @@ func (f *WebSocketClient) CloseConn(connectId int64) error {
 	if oneWSClient == nil {
 		return errors.New("no client by id")
 	}
+	oneWSClient.close()
+
 	//close and cleanup with locker
 	f.Lock()
 	defer f.Unlock()
-	oneWSClient.close()
 	delete(f.clientMap, connectId)
 	if len(f.clientMap) <= 0 {
 		f.clientMap = map[int64]*OneWSClient{}

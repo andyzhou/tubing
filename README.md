@@ -16,5 +16,6 @@ tubing is a http web socket proxy library, base one gin.
 
 ## testing
 go test -v -run="Client"
-go test -bench="Client"
+go test -bench="ClientConn"
+go test -bench="ClientSendMsg"
 go test -bench="Client" -benchmem -benchtime=10s
