@@ -1,11 +1,14 @@
 package face
 
 import (
+	"bytes"
 	"errors"
 	"log"
+	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/andyzhou/tinylib/queue"
 	"github.com/andyzhou/tubing/define"
@@ -338,80 +341,95 @@ func (f *Bucket) closeConnect(conn IWSConn) error {
 	return err
 }
 
+//read loop
+func (f *Bucket) readLoop() {
+	for {
+		select {
+		default:
+			f.cbForReadConnData()
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
 //cb for read connect data
 //this will reduce tcp read resource cost
-//func (f *Bucket) cbForReadConnData() error {
-//	var (
-//		messageType int
-//		message []byte
-//		err error
-//	)
-//	//check
-//	if f.connCount <= 0 || f.connMap == nil {
-//		return errors.New("no any active connections")
-//	}
-//
-//	//loop read connect data with locker
-//	f.Lock()
-//	defer f.Unlock()
-//	for connId, conn := range f.connMap {
-//		//check connect
-//		if connId <= 0 || conn == nil {
-//			continue
-//		}
-//		connObj, subOk := conn.(*WSConn)
-//		if !subOk || connObj == nil {
-//			continue
-//		}
-//
-//		//read message
-//		messageType, message, err = connObj.Read()
-//		if err != nil {
-//			//if timeout error, do nothing
-//			if e, ok := err.(net.Error); ok && e.Timeout() {
-//				//it's a timeout error
-//				//log.Printf("conn id %v read time out, err:%v\n", connId, err.Error())
-//				continue
-//			}
-//
-//			//call manager api to clean the connect obj
-//			if f.remote != nil {
-//				remoteAddr := connObj.GetRemoteAddr()
-//				if remoteAddr != "" {
-//					f.remote.DelRemote(remoteAddr)
-//				}
-//			}
-//
-//			//check and call closed cb
-//			if f.cbForConnClosed != nil {
-//				f.cbForConnClosed(f.router.GetName(), connId, conn, connObj.GetContext())
-//			}
-//
-//			//remove connect from bucket
-//			f.closeConnect(conn)
-//			continue
-//		}
-//
-//		//heart beat data check and opt
-//		if bytes.Compare(f.router.GetHeartByte(), message) == 0 {
-//			//it's heart beat data
-//			connObj.HeartBeat()
-//			continue
-//		}
-//
-//		//check and call read message cb
-//		if f.cbForReadMessage != nil {
-//			err = f.cbForReadMessage(
-//				f.router.GetName(),
-//				connId,
-//				conn,
-//				messageType,
-//				message,
-//				connObj.GetContext())
-//		}
-//	}
-//	return err
-//}
+func (f *Bucket) cbForReadConnData() error {
+	var (
+		messageType int
+		message []byte
+		err error
+	)
+	//check
+	if f.connCount <= 0 || f.connMap == nil {
+		return errors.New("no any active connections")
+	}
+
+	//loop read connect data with locker
+	//f.Lock()
+	//defer f.Unlock()
+	for connId, conn := range f.connMap {
+		//check connect
+		if connId <= 0 || conn == nil {
+			//remove connect from bucket
+			f.closeConnect(conn)
+			continue
+		}
+		connObj, subOk := conn.(*WSConn)
+		if !subOk || connObj == nil {
+			//remove connect from bucket
+			f.closeConnect(conn)
+			continue
+		}
+
+		//read message
+		messageType, message, err = connObj.Read()
+		if err != nil {
+			//if timeout error, do nothing
+			if e, ok := err.(net.Error); ok && e.Timeout() {
+				//it's a timeout error
+				//log.Printf("conn id %v read time out, err:%v\n", connId, err.Error())
+				continue
+			}
+
+			//call manager api to clean the connect obj
+			if f.remote != nil {
+				remoteAddr := connObj.GetRemoteAddr()
+				if remoteAddr != "" {
+					f.remote.DelRemote(remoteAddr)
+				}
+			}
+
+			//check and call closed cb
+			if f.cbForConnClosed != nil {
+				f.cbForConnClosed(f.router.GetName(), connId, conn, connObj.GetContext())
+			}
+
+			//remove connect from bucket
+			f.closeConnect(conn)
+			continue
+		}
+
+		//heart beat data check and opt
+		if bytes.Compare(f.router.GetHeartByte(), message) == 0 {
+			//it's heart beat data
+			connObj.HeartBeat()
+			continue
+		}
+
+		//check and call read message cb
+		if f.cbForReadMessage != nil {
+			err = f.cbForReadMessage(
+				f.router.GetName(),
+				connId,
+				conn,
+				messageType,
+				message,
+				connObj.GetContext())
+		}
+	}
+	return err
+}
 
 //cb for send msg consumer
 func (f *Bucket) cbForConsumerSendData(data interface{}) error {
@@ -575,15 +593,15 @@ func (f *Bucket) cbForInterCheckTicker() error {
 
 //init read message ticker
 func (f *Bucket) initReadMsgTicker() {
-	////get connect read msg rate
-	//readMsgRate := f.router.GetConf().ReadByteRate
-	//if readMsgRate <= 0 {
-	//	readMsgRate = define.DefaultReadMsgTicker
-	//}
+	//get connect read msg rate
+	readMsgRate := f.router.GetConf().ReadByteRate
+	if readMsgRate <= 0 {
+		readMsgRate = define.DefaultReadMsgTicker
+	}
 
 	//init read msg ticker
-	//f.readMsgTicker = queue.NewTicker(readMsgRate)
-	//f.readMsgTicker.SetCheckerCallback(f.cbForReadConnData)
+	f.readMsgTicker = queue.NewTicker(readMsgRate)
+	f.readMsgTicker.SetCheckerCallback(f.cbForReadConnData)
 }
 
 //init send message queue and consumer
@@ -615,10 +633,13 @@ func (f *Bucket) initActiveConnCheckTicker() {
 func (f *Bucket) interInit() {
 	//init read msg ticker
 	//f.initReadMsgTicker()
-	//
+
 	//init send message queue
 	//f.initSendMsgConsumer()
 
 	//init active conn check ticker
 	f.initActiveConnCheckTicker()
+
+	//spawn son read loop process
+	//go f.readLoop()
 }

@@ -336,7 +336,8 @@ func (f *Manager) CloseWithMessage(
 }
 
 //close conn by ids
-func (f *Manager) CloseConnect(connIds ...int64) error {
+func (f *Manager) CloseConnect(
+	connIds ...int64) error {
 	var (
 		targetBucket IBucket
 		err error
@@ -368,7 +369,10 @@ func (f *Manager) CloseConnect(connIds ...int64) error {
 }
 
 //accept new websocket connect
-func (f *Manager) Accept(connId int64, conn *websocket.Conn, ctx *gin.Context) (IWSConn, error) {
+func (f *Manager) Accept(
+	connId int64,
+	conn *websocket.Conn,
+	ctx *gin.Context) (IWSConn, error) {
 	//check
 	if connId <= 0 || conn == nil {
 		return nil, fmt.Errorf("invalid parameter, connid:%v, conn:%v\n", connId, conn)
